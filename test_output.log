@@ -1,0 +1,2 @@
+﻿httpx.ConnectError: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occ
+urred in violation of protocol (_ssl.c:1016)
