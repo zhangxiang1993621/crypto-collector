@@ -1,0 +1,109 @@
+[
+  {
+    "name": "collect",
+    "label": "加密货币价格采集",
+    "cron": "*/30 * * * *",
+    "enabled": false,
+    "commands": [
+      "python price_collector/main.py"
+    ],
+    "env_vars": {
+      "COINCAP_API_KEY": "${{ secrets.COINCAP_API_KEY }}",
+      "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
+      "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+    },
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  },
+  {
+    "name": "news",
+    "label": "币安新闻抓取",
+    "cron": "0 */2 * * *",
+    "enabled": true,
+    "commands": [
+      "python news_scraper/news_scraper.py --scroll 5 --max 50 --save"
+    ],
+    "env_vars": {
+      "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
+      "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+      "POSTS_AUTHOR_USERNAME": "${{ vars.POSTS_AUTHOR_USERNAME }}",
+      "POSTS_CATEGORY_NAME": "${{ vars.POSTS_CATEGORY_NAME }}"
+    },
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  },
+  {
+    "name": "fifa",
+    "label": "世界杯赛程抓取",
+    "cron": "0 8 * * *",
+    "enabled": true,
+    "commands": [
+      "python fifa_scraper/fifa_scraper.py --save"
+    ],
+    "env_vars": {
+      "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
+      "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+      "POSTS_AUTHOR_USERNAME": "${{ vars.POSTS_AUTHOR_USERNAME }}",
+      "POSTS_CATEGORY_NAME": "${{ vars.POSTS_CATEGORY_NAME }}"
+    },
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  },
+  {
+    "name": "fifa_blog",
+    "label": "FIFA Blog 文章抓取",
+    "cron": "0 10 * * *",
+    "enabled": true,
+    "commands": [
+      "python fifa_blog_scraper/fifa_blog_scraper.py --save --max 30"
+    ],
+    "env_vars": {
+      "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
+      "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+      "POSTS_AUTHOR_USERNAME": "${{ vars.POSTS_AUTHOR_USERNAME }}",
+      "FIFA_CATEGORY_NAME": "${{ vars.FIFA_CATEGORY_NAME }}"
+    },
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  },
+  {
+    "name": "ai_digest",
+    "label": "AI 新闻摘要推送",
+    "cron": "0 */4 * * *",
+    "enabled": true,
+    "commands": [
+      "python ai_digest/ai_digest.py --save --max 10"
+    ],
+    "env_vars": {
+      "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
+      "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+      "DEEPSEEK_API_KEY": "${{ secrets.DEEPSEEK_API_KEY }}",
+      "HOT_TOKENS_CATEGORY_NAME": "${{ vars.HOT_TOKENS_CATEGORY_NAME }}"
+    },
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  },
+  {
+    "name": "create_bots",
+    "label": "批量创建机器人",
+    "cron": "",
+    "enabled": true,
+    "trigger": "manual",
+    "commands": [
+      "python task_manager/create_bots.py"
+    ],
+    "env_vars": {},
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  },
+  {
+    "name": "bot_posts",
+    "label": "机器人观点发帖",
+    "cron": "30 */2 * * *",
+    "enabled": true,
+    "commands": [
+      "python ai_digest/bot_posts.py --save --bots 5"
+    ],
+    "env_vars": {
+      "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
+      "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+      "DEEPSEEK_API_KEY": "${{ secrets.DEEPSEEK_API_KEY }}",
+      "HOT_TOKENS_CATEGORY_NAME": "${{ vars.HOT_TOKENS_CATEGORY_NAME }}"
+    },
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  }
+]
