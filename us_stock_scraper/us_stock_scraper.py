@@ -18,6 +18,7 @@ import logging
 import argparse
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 from datetime import datetime, timezone, timedelta
 
 import pandas as pd
@@ -26,8 +27,11 @@ import matplotlib
 matplotlib.use("Agg")  # 无 GUI 后端
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase_client import get_client
 from cloakbrowser import launch
+
+if TYPE_CHECKING:
+    from supabase import Client
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -302,15 +306,15 @@ def generate_summary_json(data_list: list[dict], filepath: str) -> None:
 
 # ────────────────────── Supabase 入库 ──────────────────────
 
-def get_supabase_client() -> Client | None:
-    """获取 Supabase 客户端，环境变量缺失则返回 None"""
+def get_supabase_client() -> "Client | None":
+    """获取 Supabase 客户端（绕过代理），环境变量缺失则返回 None"""
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.warning("缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 环境变量，跳过入库")
         return None
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    return get_client()
 
 
-def upload_bars(client: Client, data_list: list[dict]) -> int:
+def upload_bars(client: "Client", data_list: list[dict]) -> int:
     """批量 upsert 分钟 K 线到 us_stock_bars 表"""
     all_rows = []
     for d in data_list:
@@ -355,7 +359,7 @@ def upload_bars(client: Client, data_list: list[dict]) -> int:
     return inserted
 
 
-def upload_trends(client: Client, data_list: list[dict]) -> int:
+def upload_trends(client: "Client", data_list: list[dict]) -> int:
     """upsert 每日趋势汇总到 us_stock_trends 表"""
     rows = []
     for d in data_list:
@@ -395,7 +399,7 @@ def upload_trends(client: Client, data_list: list[dict]) -> int:
         return 0
 
 
-def seed_symbols(client: Client) -> int:
+def seed_symbols(client: "Client") -> int:
     """种子数据：将 INDICES + STOCKS 元信息写入 stock_symbols 表（幂等 upsert）"""
     rows = []
     for item in INDICES:

@@ -21,9 +21,14 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
+from typing import TYPE_CHECKING
+
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase_client import get_client
+
+if TYPE_CHECKING:
+    from supabase import Client
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -39,9 +44,6 @@ DEEPSEEK_BASE = "https://api.deepseek.com"
 
 # ────────────────────── 工具 ──────────────────────
 
-def get_client() -> Client:
-    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
-
 
 def get_deepseek_key() -> str:
     return os.environ["DEEPSEEK_API_KEY"]
@@ -54,7 +56,7 @@ def extract_text(html: str) -> str:
 
 # ────────────────────── 数据 ──────────────────────
 
-def fetch_news_texts(client: Client, limit: int) -> list[str]:
+def fetch_news_texts(client: "Client", limit: int) -> list[str]:
     """获取最新新闻标题+摘要供 AI 参考"""
     cat_r = client.table("categories").select("id").eq("name", "news").execute()
     if not cat_r.data:
@@ -73,12 +75,12 @@ def fetch_news_texts(client: Client, limit: int) -> list[str]:
     return texts
 
 
-def get_bots(client: Client, count: int) -> list[dict]:
+def get_bots(client: "Client", count: int) -> list[dict]:
     r = client.table("profiles").select("id,username").eq("is_bot", True).execute()
     return random.sample(r.data, min(count, len(r.data)))
 
 
-def get_cat_id(client: Client) -> str:
+def get_cat_id(client: "Client") -> str:
     name = os.environ.get("HOT_TOKENS_CATEGORY_NAME", "Hot Tokens")
     return client.table("categories").select("id").eq("name", name).execute().data[0]["id"]
 
@@ -213,7 +215,7 @@ def build_post_html(body: str) -> str:
 
 # ────────────────────── 标签 ──────────────────────
 
-def sync_tags(client: Client, post_id: str, tags: list[str]) -> None:
+def sync_tags(client: "Client", post_id: str, tags: list[str]) -> None:
     if not tags:
         return
     unique = list(set(tags))

@@ -17,9 +17,14 @@ import logging
 import argparse
 from pathlib import Path
 
+from typing import TYPE_CHECKING
+
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase_client import get_client
+
+if TYPE_CHECKING:
+    from supabase import Client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,7 +49,7 @@ def get_env(env_name: str) -> str:
     return value
 
 
-def lookup_author_id(client: Client, username: str) -> str:
+def lookup_author_id(client: "Client", username: str) -> str:
     """根据用户名从 profiles 表查询 author_id"""
     try:
         result = client.table("profiles").select("id,username").eq("username", username).execute()
@@ -60,7 +65,7 @@ def lookup_author_id(client: Client, username: str) -> str:
         sys.exit(1)
 
 
-def lookup_category_id(client: Client, category_name: str) -> str:
+def lookup_category_id(client: "Client", category_name: str) -> str:
     """根据分类名从 categories 表查询 category_id"""
     try:
         result = client.table("categories").select("id,name").eq("name", category_name).execute()
@@ -249,7 +254,7 @@ def save_posts(posts: list[dict], output_path: str) -> Path:
     return output_file
 
 
-def batch_insert_posts(client: Client, posts: list[dict]) -> int:
+def batch_insert_posts(client: "Client", posts: list[dict]) -> int:
     """批量插入帖子到 Supabase posts 表（标题去重, 标签关联）
 
     参数:
@@ -308,7 +313,7 @@ def batch_insert_posts(client: Client, posts: list[dict]) -> int:
     return inserted
 
 
-def sync_post_tags(client: Client, posts: list[dict], post_ids: list[str]) -> None:
+def sync_post_tags(client: "Client", posts: list[dict], post_ids: list[str]) -> None:
     """同步帖子标签：查找/创建 tag，写入 post_tags 关联表
 
     参数:
@@ -437,10 +442,8 @@ def main():
     author_username = get_env("POSTS_AUTHOR_USERNAME")
     category_name = get_env("POSTS_CATEGORY_NAME")
 
-    # 连接 Supabase
-    supabase_url = get_env("SUPABASE_URL")
-    supabase_key = get_env("SUPABASE_SERVICE_ROLE_KEY")
-    client = create_client(supabase_url, supabase_key)
+    # 连接 Supabase (绕过代理)
+    client = get_client()
 
     # 查找 author_id 和 category_id
     author_id = lookup_author_id(client, author_username)

@@ -17,11 +17,15 @@ import base64
 import logging
 import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase_client import get_client
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+
+if TYPE_CHECKING:
+    from supabase import Client
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -196,17 +200,8 @@ def scrape_binance_news(scroll_times=3, max_articles=50):
 
 # ═══════════════════════ Supabase 入库相关 ═══════════════════════
 
-def get_supabase_client() -> Client:
-    """获取 Supabase 客户端"""
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        logger.error("缺少 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY 环境变量")
-        sys.exit(1)
-    return create_client(url, key)
 
-
-def lookup_author_id(client: Client) -> str:
+def lookup_author_id(client: "Client") -> str:
     """根据配置的用户名查询 author_id"""
     username = os.environ.get("POSTS_AUTHOR_USERNAME")
     if not username:
@@ -220,7 +215,7 @@ def lookup_author_id(client: Client) -> str:
     sys.exit(1)
 
 
-def lookup_category_id(client: Client) -> str:
+def lookup_category_id(client: "Client") -> str:
     """根据配置的分类名查询 category_id"""
     name = os.environ.get("POSTS_CATEGORY_NAME", "news")
     result = client.table("categories").select("id,name").eq("name", name).execute()
@@ -231,7 +226,7 @@ def lookup_category_id(client: Client) -> str:
     sys.exit(1)
 
 
-def load_existing_titles(client: Client) -> set[str]:
+def load_existing_titles(client: "Client") -> set[str]:
     """加载数据库中已有的帖子标题"""
     result = client.table("posts").select("title").execute()
     titles = {r["title"] for r in result.data}
@@ -317,7 +312,7 @@ def build_html_content(article: dict, image_list: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def sync_tags_for_post(client: Client, post_id: str, tag_names: list[str]) -> None:
+def sync_tags_for_post(client: "Client", post_id: str, tag_names: list[str]) -> None:
     """为单篇文章同步标签：查找/创建 tag，写入 post_tags 关联"""
     if not tag_names:
         return
@@ -361,7 +356,7 @@ def sync_tags_for_post(client: Client, post_id: str, tag_names: list[str]) -> No
             pass
 
 
-def insert_one_post(client: Client, article: dict, author_id: str, category_id: str,
+def insert_one_post(client: "Client", article: dict, author_id: str, category_id: str,
                     existing_titles: set) -> bool:
     """将单条新闻组装并入库，标题已存在则跳过"""
     title = article["title"]
@@ -553,7 +548,7 @@ def main():
     # 准备入库环境
     client = author_id = category_id = existing_titles = None
     if args.save:
-        client = get_supabase_client()
+        client = get_client()
         author_id = lookup_author_id(client)
         category_id = lookup_category_id(client)
         existing_titles = load_existing_titles(client)
