@@ -19,6 +19,9 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+# 子进程执行时需要项目根目录在 sys.path 中
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import httpx
 from dotenv import load_dotenv
 from supabase_client import get_client

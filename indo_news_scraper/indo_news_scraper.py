@@ -18,12 +18,18 @@ import random
 import logging
 import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
 from datetime import datetime, timezone
 from xml.etree import ElementTree
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase_client import get_client
+
+if TYPE_CHECKING:
+    from supabase import Client
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -119,11 +125,8 @@ INDO_KEYWORDS = [
 
 # ────────────────────── 工具 ──────────────────────
 
-def get_client() -> Client:
-    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
-
-def get_cat_id(client: Client) -> str:
+def get_cat_id(client: "Client") -> str:
     name = os.environ.get("INDO_CATEGORY_NAME", "Indo Street")
     r = client.table("categories").select("id").eq("name", name).execute()
     if not r.data:
@@ -132,7 +135,7 @@ def get_cat_id(client: Client) -> str:
     return r.data[0]["id"]
 
 
-def get_random_bot(client: Client) -> dict:
+def get_random_bot(client: "Client") -> dict:
     r = client.table("profiles").select("id,username").eq("is_bot", True).execute()
     if not r.data:
         logger.error("无可用机器人")
@@ -361,7 +364,7 @@ def build_post_html(item: dict) -> str:
 
 # ────────────────────── 标签 ──────────────────────
 
-def sync_tags(client: Client, post_id: str, tags: list[str]) -> None:
+def sync_tags(client: "Client", post_id: str, tags: list[str]) -> None:
     if not tags:
         return
     unique = list(set(tags))

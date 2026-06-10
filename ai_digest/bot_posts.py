@@ -21,6 +21,9 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
+# 子进程执行时需要项目根目录在 sys.path 中
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from typing import TYPE_CHECKING
 
 import httpx

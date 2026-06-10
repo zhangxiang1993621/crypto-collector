@@ -16,11 +16,17 @@ import json
 import logging
 import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase_client import get_client
+
+if TYPE_CHECKING:
+    from supabase import Client
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -80,8 +86,6 @@ def get_headers() -> dict:
     }
 
 
-def get_client():
-    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
 
 def get_cat_id(client):
