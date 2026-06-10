@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 import sys
 import json
 import logging
@@ -86,6 +87,10 @@ def _job_label(job_name: str) -> str:
         "fifa_blog": "FIFA Blog 文章抓取",
         "ai_digest": "AI 新闻摘要推送",
         "bot_posts": "机器人观点发帖",
+        "airdrop": "空投福利信息爬取",
+        "indo_news": "印尼热点新闻抓取",
+        "tg_summary": "Telegram 群消息汇总 Bot",
+        "us_stock": "美股数据采集 & 分钟K线图",
     }
     return labels.get(job_name, job_name)
 
@@ -231,6 +236,9 @@ class TaskScheduler:
                         clean_env[k] = v
 
                 self._log(task["name"], f"  运行: {cmd}")
+
+                # 用当前解释器路径替换 python，确保子进程使用同一 conda 环境
+                cmd = re.sub(r"\bpython\b", lambda _: sys.executable, cmd)
 
                 # 使用 Popen 实时流式读取输出
                 process = subprocess.Popen(

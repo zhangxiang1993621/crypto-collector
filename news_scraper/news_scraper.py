@@ -322,8 +322,9 @@ def sync_tags_for_post(client: Client, post_id: str, tag_names: list[str]) -> No
     if not tag_names:
         return
 
-    prefixed = [f"#{t}" if not t.startswith("#") else t for t in tag_names]
-    unique_names = list(set(prefixed))
+    # tag 不加 # 前缀（与 indo_news_scraper 等保持一致）
+    cleaned = [t.lstrip("#") for t in tag_names]
+    unique_names = list(set(cleaned))
 
     # 查询已有标签
     try:

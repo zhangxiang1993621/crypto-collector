@@ -85,29 +85,89 @@ def get_cat_id(client: Client) -> str:
 
 # ────────────────────── AI 生成 ──────────────────────
 
-def generate_bot_post(api_key: str, bot_name: str, news_brief: str) -> dict | None:
-    """为单个机器人生成一篇观点帖"""
-    # 随机帖子风格
-    styles = [
-        "像一个在群里吐槽行情的散户，表达自己的困惑或兴奋",
-        "像一个有点经验的老韭菜，发表对当前行情的判断",
-        "像一个刚入圈的新手，提出问题引发讨论",
-        "像一个技术分析师，从K线/指标角度来看",
-        "像一个消息面交易员，对最新新闻做出反应",
-    ]
-    style = random.choice(styles)
+# 机器人角色池：每种角色有不同的关注点和语气
+BOT_PERSONAS = [
+    {
+        "role": "技术分析师",
+        "focus": "关注K线形态、支撑阻力、交易量、MACD/RSI等技术指标",
+        "tone": "用数据说话，冷静专业",
+        "style": "像专业交易员在做复盘",
+    },
+    {
+        "role": "消息面猎手",
+        "focus": "关注突发新闻、政策变化、机构动向对市场的影响",
+        "tone": "反应迅速，解读消息对行情的影响",
+        "style": "像财经记者在发快讯分析",
+    },
+    {
+        "role": "链上数据控",
+        "focus": "关注链上资金流、巨鲸地址、交易所流入流出、TVL变化",
+        "tone": "数据驱动，从链上发现信号",
+        "style": "像数据分析师在分享发现",
+    },
+    {
+        "role": "散户吐槽大王",
+        "focus": "关注自己持仓的涨跌、市场的情绪变化、社区热点",
+        "tone": "情绪化，带梗，爱用emoji，吐槽主力套路",
+        "style": "像在群里和币友吹水",
+    },
+    {
+        "role": "基本面信徒",
+        "focus": "关注项目进展、协议升级、生态发展、长期价值",
+        "tone": "理性乐观，强调长期视角",
+        "style": "像价值投资者在分享研究结论",
+    },
+    {
+        "role": "空头司令",
+        "focus": "关注市场风险、泡沫信号、利空因素、可能的下行",
+        "tone": "谨慎悲观，指出风险点",
+        "style": "像做空者在找做空理由",
+    },
+    {
+        "role": "新韭菜",
+        "focus": "对新鲜事物好奇，容易FOMO，会问一些基础问题",
+        "tone": "兴奋中带迷茫，渴望学习",
+        "style": "像刚入圈的新人在请教",
+    },
+]
+
+
+def generate_all_bot_posts(api_key: str, bots: list[dict], news_brief: str) -> list[dict]:
+    """一次 API 调用为所有机器人生成观点帖，确保风格各异"""
+
+    # 为每个机器人分配不同角色（循环使用角色池）
+    assignments = []
+    for i, bot in enumerate(bots):
+        persona = BOT_PERSONAS[i % len(BOT_PERSONAS)]
+        assignments.append({
+            "name": bot["username"],
+            "role": persona["role"],
+            "focus": persona["focus"],
+            "tone": persona["tone"],
+        })
+
+    # 构建角色描述
+    roles_desc = "\n".join(
+        f"- {a['name']}: {a['role']}，{a['focus']}，语气：{a['tone']}"
+        for a in assignments
+    )
 
     system_prompt = (
-        f"你的名字是 {bot_name}，你是加密货币社区的一个普通用户。\n"
-        f"你要{style}。\n"
-        "根据以下新闻简报，生成一条帖子。\n"
-        "要求：\n"
-        f"1. 输出 JSON：{{\"title\": \"标题(20字以内)\", \"body\": \"帖子正文(2-4句口语)\", \"tags\": [\"BTC\", ...]}}\n"
-        "2. body 完全口语化，像微信群聊天，不要 AI 腔，不要加\"根据新闻\"\"作为用户\"\n"
-        "3. 可以带 emoji、反问、预测、讨论性提问\n"
-        "4. tags 英文 1-3 个\n"
-        "5. 只输出 JSON"
+        "你是一个加密货币社区的内容生成器。以下是几个不同的社区成员，"
+        "请帮每个人各生成一条帖子。\n\n"
+        f"{roles_desc}\n\n"
+        "核心要求：\n"
+        "1. 每个人的帖子必须完全不同的角度和观点，不能出现相似的表达\n"
+        "2. 有人看多、有人看空、有人中立，观点要有冲突和对比\n"
+        "3. 每人只关注自己角色对应的领域，不要跨界\n"
+        "4. 帖子有emoji、反问、预测，像真人聊天\n"
+        "5. body 2-4句口语，不超过50个字\n"
+        "6. 输出 JSON 数组，每项格式：\n"
+        '   {"name": "用户名", "title": "20字内标题", "body": "正文", "tags": ["TAG"]}\n'
+        "7. 只输出 JSON 数组，不要其他文字"
     )
+
+    user_content = f"以下是最新加密市场新闻，请各角色据此发帖：\n\n{news_brief}"
 
     resp = httpx.post(
         f"{DEEPSEEK_BASE}/v1/chat/completions",
@@ -116,17 +176,17 @@ def generate_bot_post(api_key: str, bot_name: str, news_brief: str) -> dict | No
             "model": "deepseek-chat",
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"新闻简报：\n{news_brief}"},
+                {"role": "user", "content": user_content},
             ],
-            "temperature": 0.95,
-            "max_tokens": 600,
+            "temperature": 0.9,
+            "max_tokens": 2500,
         },
-        timeout=60,
+        timeout=120,
     )
 
     if resp.status_code != 200:
         logger.error(f"DeepSeek 错误: {resp.status_code}")
-        return None
+        return []
 
     raw = resp.json()["choices"][0]["message"]["content"].strip()
     if raw.startswith("```"):
@@ -134,21 +194,21 @@ def generate_bot_post(api_key: str, bot_name: str, news_brief: str) -> dict | No
         raw = re.sub(r'\n```$', '', raw)
 
     try:
-        return json.loads(raw)
+        results = json.loads(raw)
+        if not isinstance(results, list):
+            logger.error(f"AI 返回非数组: {raw[:200]}")
+            return []
+        logger.info(f"AI 一次生成 {len(results)} 条帖子")
+        return results
     except json.JSONDecodeError:
-        logger.warning(f"JSON 解析失败，跳过")
-        return None
+        logger.error(f"JSON 解析失败: {raw[:300]}")
+        return []
 
 
 # ────────────────────── HTML ──────────────────────
 
 def build_post_html(body: str) -> str:
-    return "\n".join([
-        f'<p style="font-size:16px;line-height:1.9;color:#333;">{body}</p>',
-        '<hr>',
-        '<p style="font-size:11px;color:#aaa;">'
-        '🤖 以上内容由社区机器人自动生成，仅供参考。</p>',
-    ])
+    return f'<p style="font-size:16px;line-height:1.9;color:#333;">{body}</p>'
 
 
 # ────────────────────── 标签 ──────────────────────
@@ -199,12 +259,17 @@ def run(save: bool = False, bot_count: int = 5, max_news: int = 15):
     logger.info(f"选择 {len(bots)} 个机器人发帖")
 
     api_key = get_deepseek_key()
-    posts = []
+    ai_results = generate_all_bot_posts(api_key, bots, news_brief)
 
-    for bot in bots:
-        logger.info(f"生成 [{bot['username']}] 的观点帖...")
-        ai = generate_bot_post(api_key, bot["username"], news_brief)
-        if not ai:
+    # 建立 bot name → bot record 映射
+    bot_map = {b["username"]: b for b in bots}
+
+    posts = []
+    for ai in ai_results:
+        name = ai.get("name", "")
+        bot = bot_map.get(name)
+        if not bot:
+            logger.warning(f"  跳过未知用户: {name}")
             continue
 
         html = build_post_html(ai["body"])
@@ -214,7 +279,7 @@ def run(save: bool = False, bot_count: int = 5, max_news: int = 15):
             "content": html,
             "tags": ai.get("tags", []) + ["CryptoView", "BotOpinion"],
         })
-        logger.info(f"  {ai['title'][:50]}")
+        logger.info(f"  [{name}] {ai['title'][:50]}")
 
     if save:
         cat_id = get_cat_id(client)

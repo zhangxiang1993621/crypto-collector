@@ -323,9 +323,10 @@ def sync_post_tags(client: Client, posts: list[dict], post_ids: list[str]) -> No
         tag_names = post.get("tags", [])
         if tag_names:
             post_id = post_ids[idx]
-            prefixed = [f"#{t}" if not t.startswith("#") else t for t in tag_names]
-            post_tag_map[post_id] = prefixed
-            all_tag_names.extend(prefixed)
+            # tag 不加 # 前缀（与 indo_news_scraper 等保持一致）
+            cleaned = [t.lstrip("#") for t in tag_names]
+            post_tag_map[post_id] = cleaned
+            all_tag_names.extend(cleaned)
 
     if not all_tag_names:
         return

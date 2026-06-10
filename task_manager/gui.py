@@ -132,15 +132,16 @@ class TaskManagerApp:
         self._refresh_table()
 
     def _refresh_table(self) -> None:
-        """刷新任务表格"""
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
+        """刷新任务表格（仅更新数据，不重建行，保留选中状态）"""
         status_map = self.scheduler.get_status()
-        for t in self._tasks:
+
+        for iid in self.tree.get_children():
+            t = next((t for t in self._tasks if t["name"] == iid), None)
+            if t is None:
+                continue
             name = t["name"]
             st = status_map.get(name, {})
-            self.tree.insert("", tk.END, iid=name, values=(
+            self.tree.item(iid, values=(
                 name,
                 t["label"],
                 t["cron"],
@@ -149,6 +150,30 @@ class TaskManagerApp:
                 st.get("last_status", "-"),
                 st.get("next_run", "-") if t["enabled"] else "-",
             ))
+
+        # 检测是否有新增/删除的任务，有则重建
+        current_ids = set(self.tree.get_children())
+        config_ids = {t["name"] for t in self._tasks}
+        if current_ids != config_ids:
+            selection = self.tree.selection()
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+            for t in self._tasks:
+                name = t["name"]
+                st = status_map.get(name, {})
+                self.tree.insert("", tk.END, iid=name, values=(
+                    name,
+                    t["label"],
+                    t["cron"],
+                    "已启用" if t["enabled"] else "已停用",
+                    st.get("last_run", "-"),
+                    st.get("last_status", "-"),
+                    st.get("next_run", "-") if t["enabled"] else "-",
+                ))
+            # 恢复选中
+            for sid in selection:
+                if sid in config_ids:
+                    self.tree.selection_add(sid)
 
         # 每5秒自动刷新
         self.root.after(5000, self._refresh_table)
