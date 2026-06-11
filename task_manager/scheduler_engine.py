@@ -231,6 +231,9 @@ class TaskScheduler:
                     if isinstance(v, str) and v.startswith("${{"):
                         var_name = v.strip("${{").strip("}}").strip().split(".")[-1]
                         real_val = os.environ.get(var_name, "")
+                        # 空值不传递：让子进程使用 os.environ.get("VAR", default) 的默认值
+                        if not real_val:
+                            continue
                         clean_env[k] = real_val
                     else:
                         clean_env[k] = v

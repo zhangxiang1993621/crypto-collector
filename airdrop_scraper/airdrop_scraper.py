@@ -197,26 +197,26 @@ def scrape_okx() -> list[dict]:
 
     try:
         import time
-        import urllib.request
-        import ssl as _ssl
 
         url = OKX_API.replace("{ts}", str(int(time.time() * 1000)))
-        ctx = _ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = _ssl.CERT_NONE
+        resp = httpx.get(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+                ),
+                "Accept": "application/json",
+                "Referer": "https://www.okx.com/help",
+            },
+            timeout=30,
+        )
 
-        req = urllib.request.Request(url, headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/json",
-            "Referer": "https://www.okx.com/help",
-        })
+        if resp.status_code != 200:
+            logger.warning(f"    OKX API 返回 {resp.status_code}")
+            return items
 
-        with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
-            data = json.loads(resp.read().decode())
-
+        data = resp.json()
         announcements = data.get("data", {}).get("list", [])
 
         for a in announcements:
@@ -232,7 +232,7 @@ def scrape_okx() -> list[dict]:
                 "summary": truncate(strip_html(a.get("description", a.get("summary", ""))), 300),
             })
     except Exception as e:
-        logger.error(f"    OKX 异常: {e}")
+        logger.warning(f"    OKX 不可达（本网络无法访问 www.okx.com）: {e}")
 
     logger.info(f"    获取 {len(items)} 条")
     return items

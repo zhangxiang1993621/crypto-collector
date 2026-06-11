@@ -49,6 +49,6 @@ def get_client() -> "Client":
         logger.error("缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 环境变量")
         sys.exit(1)
 
-    # trust_env=False → 不读取系统代理/环境变量代理
-    http_client = httpx.Client(trust_env=False)
+    # trust_env=True → 读取系统代理/环境变量代理（本机需要代理访问外网）
+    http_client = httpx.Client(trust_env=True)
     return create_client(url, key, options=SyncClientOptions(httpx_client=http_client))
