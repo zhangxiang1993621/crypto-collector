@@ -124,9 +124,12 @@ def get_team_info(team_name: str) -> tuple[str, str]:
     Returns:
         (flag_emoji, country_cn) 元组，未匹配时返回 ("🏳️", team_name)
     """
-    # 精确匹配
-    # 过滤占位符（如 "1A", "W73", "FINAL", "FIXTURE" 等）
-    if not team_name or team_name[0].isdigit() or team_name.startswith("W") or team_name in ("FINAL", "FIXTURE", "BRONZE"):
+    # 过滤占位符：数字开头（1A/2B）、W+数字（W73）、阶段名（FINAL/FIXTURE/BRONZE）、3开头的组合名
+    if not team_name:
+        return "🏳️", team_name
+    if team_name in ("FINAL", "FIXTURE", "BRONZE"):
+        return "🏳️", team_name
+    if re.match(r'^[W\d]', team_name):
         return "🏳️", team_name
 
     if team_name in TEAM_FLAGS:
@@ -609,7 +612,6 @@ def run(
 
     tag_names = ["2026世界杯", "WorldCup2026", "美加墨世界杯"]
     if scores_only:
-        # 仅更新已有帖子的比分
         existing = client.table("posts").select("id,title").eq(
             "category_id", cat_id
         ).execute()
@@ -640,6 +642,77 @@ def run(
     logger.info("=== 完成 ===")
 
 
+def refix_posts() -> None:
+    """强制重建所有世界杯帖子内容（国旗/中文名修复）
+
+    通过模糊匹配已有帖子标题找到对应比赛，用当前 build_post_html 重建内容。
+    """
+    logger.info("=== 世界杯帖子内容强制重生成（国旗修复模式）===")
+
+    client = get_client()
+    if client is None:
+        logger.error("无法连接 Supabase")
+        return
+
+    cat_id = get_cat_id(client)
+    author_id = get_author_id(client)
+
+    # 获取所有已有帖子
+    existing = client.table("posts").select("id,title").eq(
+        "category_id", cat_id
+    ).execute()
+    logger.info(f"已有 {len(existing.data)} 条世界杯帖子")
+
+    # 获取所有比赛
+    all_matches = fetch_matches_from_api()
+    logger.info(f"API 返回 {len(all_matches)} 场比赛")
+
+    tag_names = ["2026世界杯", "WorldCup2026", "美加墨世界杯"]
+
+    updated = 0
+    for m in all_matches:
+        host = m["host_team"]
+        away = m["away_team"]
+
+        # 跳过占位符比赛
+        match_num = m["match_number"]
+        if not isinstance(match_num, int) or match_num <= 0:
+            continue
+        if not host or not away:
+            continue
+        if host[0].isdigit() or away[0].isdigit() or host.startswith("W") or away.startswith("W"):
+            continue
+
+        # 在已有帖子中查找匹配：title 含 host vs away
+        found_id = None
+        for post in existing.data:
+            title = post["title"]
+            if host.lower() in title.lower() and away.lower() in title.lower() and "vs" in title.lower():
+                found_id = post["id"]
+                break
+
+        if found_id:
+            content = build_post_html(m)
+            title = make_post_title(m)[:200]
+            client.table("posts").update({
+                "title": title,
+                "content": content,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", found_id).execute()
+            updated += 1
+            logger.info(f"  [重建] {host} vs {away}  → post {found_id[:8]}")
+        else:
+            # 帖子不存在，创建新帖
+            try:
+                upsert_post(client, m, author_id, cat_id, tag_names)
+                updated += 1
+                logger.info(f"  [新建] {host} vs {away}")
+            except Exception as e:
+                logger.error(f"  新建失败 [{host} vs {away}]: {e}")
+
+    logger.info(f"=== 重生成完成: 处理 {updated} 条 ===")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="2026 世界杯比分抓取")
     p.add_argument("--save", action="store_true", help="写入数据库")
@@ -647,7 +720,12 @@ def main() -> None:
     p.add_argument("--today", action="store_true", default=True, help="仅当天及未来比赛")
     p.add_argument("--all", action="store_true", help="处理所有比赛")
     p.add_argument("--scores", action="store_true", help="仅更新已有帖子的比分")
+    p.add_argument("--refix", action="store_true", help="强制重建所有帖子内容（修复国旗/中文名）")
     args = p.parse_args()
+
+    if args.refix:
+        refix_posts()
+        return
 
     today_only = not args.all
     run(save=args.save, max_items=args.max, today_only=today_only, scores_only=args.scores)
