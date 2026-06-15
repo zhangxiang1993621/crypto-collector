@@ -12,11 +12,9 @@
 
 import os
 import sys
-import json
 import time
 import logging
 import argparse
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 from datetime import datetime, timezone, timedelta
@@ -97,13 +95,14 @@ def fetch_single(browser_page, symbol: str) -> dict:
 
     try:
         browser_page.goto(url, timeout=20000)
-        content = browser_page.content()
-
-        json_match = re.search(r"<pre>(.*?)</pre>", content, re.DOTALL)
-        if json_match:
-            raw = json.loads(json_match.group(1))
-        else:
-            return {"symbol": symbol, "data": None, "error": "响应非 JSON"}
+        # 使用 evaluate + fetch 获取原始 JSON，绕过浏览器 JSON viewer 的 <pre> 渲染问题
+        raw = browser_page.evaluate(f"""
+            async () => {{
+                const resp = await fetch('{url}');
+                if (!resp.ok) throw new Error(`HTTP ${{resp.status}}`);
+                return await resp.json();
+            }}
+        """)
 
         result_list = raw.get("chart", {}).get("result", [])
         if not result_list:
@@ -442,13 +441,14 @@ def _fetch_for_date(browser_page, symbol: str, target_date: str) -> dict:
 
     try:
         browser_page.goto(url, timeout=20000)
-        content = browser_page.content()
+        raw = browser_page.evaluate(f"""
+            async () => {{
+                const resp = await fetch('{url}');
+                if (!resp.ok) throw new Error(`HTTP ${{resp.status}}`);
+                return await resp.json();
+            }}
+        """)
 
-        json_match = re.search(r"<pre>(.*?)</pre>", content, re.DOTALL)
-        if not json_match:
-            return {"symbol": symbol, "data": None, "error": "响应非 JSON"}
-
-        raw = json.loads(json_match.group(1))
         result_list = raw.get("chart", {}).get("result", [])
         if not result_list:
             return {"symbol": symbol, "data": None, "error": "API 返回空数据"}
