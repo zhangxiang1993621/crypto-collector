@@ -420,6 +420,31 @@ def get_match_display_status(m: dict) -> str:
     return "未开始"
 
 
+def is_match_live(m: dict) -> bool:
+    """判断比赛是否正在进行中（用于设置帖子 hot 标记）
+
+    判定逻辑：
+      - match_status == "live" → 进行中
+      - 比赛已开始（datetime_iso < now）且有比分数据 → 视为进行中
+      - 否则 → 未进行
+    """
+    if m.get("match_status") == "live":
+        return True
+    if m.get("match_status") == "finished":
+        return False
+    # 根据时间和比分综合判断：已开赛且有比分 = 进行中
+    hg = m.get("host_goals")
+    ag = m.get("away_goals")
+    if hg is not None and ag is not None:
+        try:
+            dt = datetime.fromisoformat(m["datetime_iso"].replace("Z", "+00:00"))
+            if dt < datetime.now(timezone.utc):
+                return True  # 开赛后已有比分数据
+        except Exception:
+            pass
+    return False
+
+
 def get_score_text(m: dict) -> str:
     """获取比分显示文本"""
     hg = m.get("host_goals")
@@ -525,6 +550,7 @@ def upsert_post(
     title = make_post_title(m)
     content = build_post_html(m)
     now = datetime.now(timezone.utc).isoformat()
+    is_hot = is_match_live(m)
 
     # 检查帖子是否已存在
     r = client.table("posts").select("id").eq("title", title).execute()
@@ -533,9 +559,10 @@ def upsert_post(
         post_id = r.data[0]["id"]
         client.table("posts").update({
             "content": content,
+            "is_hot": is_hot,
             "updated_at": now,
         }).eq("id", post_id).execute()
-        logger.info(f"  [更新] {title[:60]}... 比分: {get_score_text(m)}")
+        logger.info(f"  [更新] {title[:60]}... 比分: {get_score_text(m)}  hot={is_hot}")
     else:
         resp = client.table("posts").insert({
             "title": title[:200],
@@ -543,11 +570,12 @@ def upsert_post(
             "author_id": author_id,
             "category_id": cat_id,
             "status": "published",
+            "is_hot": is_hot,
             "created_at": now,
             "updated_at": now,
         }).execute()
         post_id = resp.data[0]["id"]
-        logger.info(f"  [新建] {title[:60]}...")
+        logger.info(f"  [新建] {title[:60]}...  hot={is_hot}")
 
     # 同步标签
     if post_id:
@@ -624,12 +652,14 @@ def run(
             if title in existing_titles:
                 content = build_post_html(m)
                 pid = existing_titles[title]
+                is_hot = is_match_live(m)
                 client.table("posts").update({
                     "content": content,
+                    "is_hot": is_hot,
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", pid).execute()
                 updated += 1
-                logger.info(f"  [比分更新] {m['host_team']} vs {m['away_team']}: {get_score_text(m)}")
+                logger.info(f"  [比分更新] {m['host_team']} vs {m['away_team']}: {get_score_text(m)}  hot={is_hot}")
         logger.info(f"比分更新完成: {updated} 条")
     else:
         # 首次爬取：为每场比赛创建帖子
@@ -694,13 +724,15 @@ def refix_posts() -> None:
         if found_id:
             content = build_post_html(m)
             title = make_post_title(m)[:200]
+            is_hot = is_match_live(m)
             client.table("posts").update({
                 "title": title,
                 "content": content,
+                "is_hot": is_hot,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", found_id).execute()
             updated += 1
-            logger.info(f"  [重建] {host} vs {away}  → post {found_id[:8]}")
+            logger.info(f"  [重建] {host} vs {away}  → post {found_id[:8]}  hot={is_hot}")
         else:
             # 帖子不存在，创建新帖
             try:
