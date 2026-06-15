@@ -33,7 +33,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
 BATCH_SIZE = 20
 
 # 加载环境变量
@@ -242,18 +241,6 @@ def assemble_posts(news_list: list[dict], author_id: str, category_id: str) -> l
     return posts
 
 
-def save_posts(posts: list[dict], output_path: str) -> Path:
-    """保存组装后的帖子到 JSON 文件"""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    output_file = OUTPUT_DIR / output_path
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(posts, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"帖子数据已保存至: {output_file}")
-    return output_file
-
-
 def batch_insert_posts(client: "Client", posts: list[dict]) -> int:
     """批量插入帖子到 Supabase posts 表（标题去重, 标签关联）
 
@@ -421,18 +408,10 @@ def print_summary(posts: list[dict]):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="新闻转帖子组装工具")
-    parser.add_argument(
-        "--input", type=str, default="binance_news.json",
-        help="输入的新闻 JSON 文件名 (默认 binance_news.json)"
-    )
-    parser.add_argument(
-        "--output", type=str, default="posts_draft.json",
-        help="输出的帖子 JSON 文件名 (默认 posts_draft.json)"
-    )
+    parser = argparse.ArgumentParser(description="新闻转帖组装工具")
     parser.add_argument(
         "--save", action="store_true",
-        help="写入 Supabase posts 表（不加此参数则仅保存到文件）"
+        help="写入 Supabase posts 表"
     )
     args = parser.parse_args()
 
@@ -449,17 +428,9 @@ def main():
     author_id = lookup_author_id(client, author_username)
     category_id = lookup_category_id(client, category_name)
 
-    # 加载新闻
-    input_path = OUTPUT_DIR / args.input
-    news_list = load_news(str(input_path))
-
-    # 组装帖子
-    posts = assemble_posts(news_list, author_id, category_id)
-
-    # 保存到文件
-    save_posts(posts, args.output)
-
-    print_summary(posts)
+    # 组装帖子（需要外部提供 news_list 数据源）
+    logger.warning("assemble_posts 已精简为 Supabase 直接入库模式，请使用 news_scraper.py --save")
+    return
 
     # 写入数据库
     if args.save:

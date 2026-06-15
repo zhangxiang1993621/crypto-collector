@@ -52,8 +52,6 @@ FIFA_MATCH_CENTRE = "https://www.fifa.com/en/match-centre/matches"
 # 搜狐体育世界杯文字直播比分页（中文，结构相对稳定）
 SOHU_WC_SCORES = "https://sports.sohu.com/s/2026shijiebei/"
 
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
-
 # ────────────────────── 国家队国旗映射 ──────────────────────
 
 # 2026 世界杯 48 支参赛队伍：英文名 → {国旗 emoji, 中文国名}

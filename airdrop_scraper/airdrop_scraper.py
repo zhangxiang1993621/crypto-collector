@@ -37,8 +37,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
-
 # ────────────────────── 交易所 API / 页面配置 ──────────────────────
 # Binance 内部 API（catalogId=48 是最新动态/上币）
 BINANCE_API = (
@@ -428,7 +426,7 @@ def merge_items(existing: list[dict], new: list[dict]) -> tuple[list[dict], list
 
 # ────────────────────── 主流程 ──────────────────────
 
-def run(save: bool = False, max_items: int = 20, output: str | None = None):
+def run(save: bool = False, max_items: int = 20):
     logger.info("=== Web3 空投福利信息爬取 ===")
 
     scrapers = {
@@ -454,10 +452,6 @@ def run(save: bool = False, max_items: int = 20, output: str | None = None):
     if not all_items:
         logger.warning("无匹配信息")
         return
-
-    # 写入文件
-    if output or output is None:
-        save_to_json(all_items, output)
 
     # 打印预览（处理 Windows GBK 编码）
     _safe_print("\n" + "=" * 60)
@@ -573,26 +567,12 @@ def _parse_items_from_cards(html: str) -> list[dict]:
     return items
 
 
-def save_to_json(items: list[dict], filepath: str | None = None) -> str:
-    """将空投数据写入 JSON 文件"""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    if filepath is None:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = str(OUTPUT_DIR / f"airdrop_{ts}.json")
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(items, f, ensure_ascii=False, indent=2)
-    logger.info(f"[文件] 已写入 {filepath} ({len(items)} 条)")
-    return filepath
-
-
 def main():
     p = argparse.ArgumentParser(description="Web3 空投福利信息爬取")
     p.add_argument("--save", action="store_true", help="写入数据库")
     p.add_argument("--max", type=int, default=20, help="最大条目数")
-    p.add_argument("--output", type=str, default=None,
-                   help="输出 JSON 文件路径 (默认 output/airdrop_时间戳.json)")
     args = p.parse_args()
-    run(save=args.save, max_items=args.max, output=args.output)
+    run(save=args.save, max_items=args.max)
 
 
 if __name__ == "__main__":

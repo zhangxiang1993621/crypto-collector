@@ -2,16 +2,13 @@
 
 功能：从币安广场新闻页面抓取新闻，直接写入 Supabase posts 表
 用法：
-    python news_scraper.py                              # 抓取并保存到 JSON
+    python news_scraper.py                              # 抓取并打印
     python news_scraper.py --save                       # 抓取并直接入库
     python news_scraper.py --save --scroll 10 --max 50  # 自定义参数
-
-如果指定 --output 则额外保存 JSON（调试用）
 """
 
 import os
 import sys
-import json
 import time
 import base64
 import logging
@@ -40,7 +37,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.binance.bh/zh-CN/square/news/all"
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 
 def scrape_binance_news(scroll_times=3, max_articles=50):
@@ -507,15 +503,6 @@ def fetch_article_images(page, articles: list[dict],
         logger.info(f"入库完成: {saved}/{len(articles)} 条")
 
 
-def save_results(articles, output_path):
-    """保存结果到 JSON 文件（可选）"""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    output_file = OUTPUT_DIR / output_path
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(articles, f, ensure_ascii=False, indent=2)
-    logger.info(f"JSON 已保存至 {output_file}")
-
-
 def print_summary(articles):
     """打印汇总"""
     print("\n" + "=" * 60)
@@ -536,7 +523,6 @@ def main():
     parser = argparse.ArgumentParser(description="币安广场新闻抓取 + 入库工具")
     parser.add_argument("--scroll", type=int, default=10, help="滚动次数(默认 10)")
     parser.add_argument("--max", type=int, default=100, help="最大抓取条数(默认 100)")
-    parser.add_argument("--output", type=str, default=None, help="额外输出 JSON 文件(可选)")
     parser.add_argument("--save", action="store_true", help="直接入库（需配置环境变量）")
     args = parser.parse_args()
 
@@ -590,10 +576,6 @@ def main():
                              category_id=category_id,
                              existing_titles=existing_titles)
         browser.close()
-
-    # 输出 JSON（可选）
-    if args.output:
-        save_results(articles, args.output)
 
     print_summary(articles)
     logger.info("=== 抓取完成 ===")

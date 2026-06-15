@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://fifaworldcup26.hospitality.fifa.com"
 BLOG_LIST_URL = f"{BASE_URL}/blog"
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 
 # ────────────────────── Supabase 工具 ──────────────────────
@@ -460,14 +459,7 @@ def run(save_to_db: bool = False, max_articles: int = 50, output_file: str | Non
     if save_to_db:
         logger.info(f"入库完成: 新增 {saved_count} 篇")
 
-    # 保存 JSON
-    if output_file:
-        out_path = Path(output_file) if Path(output_file).is_absolute() else OUTPUT_DIR / output_file
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info(f"已保存 JSON: {out_path}")
-
-    logger.info(f"=== Blog 抓取完成, 共 {len(results)} 篇 ===")
+    logger.info("=== FIFA Blog 抓取完成 ===")
     return results
 
 

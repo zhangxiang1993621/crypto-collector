@@ -40,8 +40,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
-
 # ────────────────────── 新闻源 ──────────────────────
 
 NEWS_SOURCES = [

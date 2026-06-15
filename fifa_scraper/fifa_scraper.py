@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 FIFA_API = "https://fifaworldcup26.hospitality.fifa.com/next-api/matches-all?productCode=26FWC&productType=5"
 FIFA_PAGE = "https://fifaworldcup26.hospitality.fifa.com/us/en/choose-matches?scheduleView=true"
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 
 # ────────────────────── Supabase 工具 ──────────────────────
@@ -216,7 +215,7 @@ def build_html_schedule(matches: list[dict]) -> str:
 
 # ────────────────────── 主流程 ──────────────────────
 
-def run(save_to_db: bool = False, output_file: str | None = None) -> list[dict]:
+def run(save_to_db: bool = False) -> list[dict]:
     api_matches = fetch_matches_from_api()
     group_map = fetch_group_mapping()
 
@@ -254,12 +253,6 @@ def run(save_to_db: bool = False, output_file: str | None = None) -> list[dict]:
     if fixed:
         logger.info(f"推导修复 {fixed} 场缺失分组")
 
-    if output_file:
-        out_path = Path(output_file) if Path(output_file).is_absolute() else OUTPUT_DIR / output_file
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info(f"已保存 JSON: {out_path}")
-
     if save_to_db:
         client = get_supabase_client()
         author_id = lookup_author_id(client)
@@ -273,11 +266,10 @@ def run(save_to_db: bool = False, output_file: str | None = None) -> list[dict]:
 def main():
     parser = argparse.ArgumentParser(description="FIFA 2026 世界杯赛程抓取")
     parser.add_argument("--save", action="store_true", help="直接入库")
-    parser.add_argument("--output", type=str, default=None, help="额外输出 JSON 文件(可选)")
     args = parser.parse_args()
 
     logger.info("=== FIFA 2026 世界杯赛程抓取 ===")
-    run(save_to_db=args.save, output_file=args.output)
+    run(save_to_db=args.save)
     logger.info("=== 抓取完成 ===")
 
 

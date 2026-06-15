@@ -11,8 +11,8 @@ import re
 import json
 import time
 import logging
-from pathlib import Path
-from datetime import datetime
+from typing import TYPE_CHECKING
+from datetime import datetime, timezone
 
 import httpx
 from cloakbrowser import launch
@@ -24,7 +24,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
 POPULAR_URL = "https://www.bilibili.com/v/popular/all?spm_id_from=333.1007.0.0"
 
 
@@ -93,74 +92,9 @@ def format_count(num: int | str) -> str:
     return str(num)
 
 
-def build_markdown(videos: list[dict]) -> str:
-    """生成 Markdown 格式输出"""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    lines = [
-        f"# 哔哩哔哩热门视频",
-        f"",
-        f"> 更新时间：{now}",
-        f"> 数据来源：[B站热门](https://www.bilibili.com/v/popular/all)",
-        f"> 共 {len(videos)} 条",
-        f"",
-        f"---",
-        f"",
-    ]
-
-    for i, v in enumerate(videos, 1):
-        title = v.get("title", "未知标题")
-        link = v.get("link", "")
-        tag = v.get("tag", "")
-        play = v.get("play", "")
-        danmaku = v.get("danmaku", "")
-        like = v.get("like", "")
-        coin = v.get("coin", "")
-        favorite = v.get("favorite", "")
-        up_name = v.get("up_name", "未知")
-        up_info = v.get("up_info", {})
-
-        lines.append(f"## {i}. {title}")
-        lines.append(f"")
-        lines.append(f"**视频链接**: [{title}]({link})")
-        lines.append(f"")
-        lines.append(f"| 项目 | 详情 |")
-        lines.append(f"|------|------|")
-
-        if tag:
-            lines.append(f"| 热门标签 | {tag} |")
-        lines.append(f"| 播放量 | {play} |")
-        lines.append(f"| 弹幕 | {danmaku} |")
-        lines.append(f"| 点赞 | {like} |")
-        lines.append(f"| 硬币 | {coin} |")
-        lines.append(f"| 收藏 | {favorite} |")
-        lines.append(f"| | |")
-
-        # UP 主信息
-        up_space_url = f"https://space.bilibili.com/{up_info.get('mid', '')}" if up_info.get("mid") else ""
-        lines.append(f"### UP 主：{up_name}")
-        lines.append(f"")
-
-        if up_info:
-            lines.append(f"| 项目 | 详情 |")
-            lines.append(f"|------|------|")
-            lines.append(f"| UP 主 | [{up_info.get('name', up_name)}]({up_space_url}) |")
-            lines.append(f"| UID | {up_info.get('mid', '')} |")
-        else:
-            lines.append(f"| UP 主 | {up_name} |")
-
-        lines.append(f"")
-        lines.append(f"---")
-        lines.append(f"")
-
-    return "\n".join(lines)
-
-
 def main():
     logger.info("=" * 50)
     logger.info("B站热门视频爬虫启动")
-
-    # 确保输出目录存在
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # 第一步：使用 CloakBrowser 抓取热门列表
     logger.info("正在启动 CloakBrowser（无头模式）...")
@@ -233,19 +167,15 @@ def main():
             logger.warning(f"  [{i+1}/{len(videos)}] {v['title'][:30]}... | API 获取失败，使用原始数据")
             v["up_info"] = {}
 
-    # 第三步：生成 Markdown 文件
-    md_content = build_markdown(videos)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = OUTPUT_DIR / f"bilibili_hot_{timestamp}.md"
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(md_content)
-
-    logger.info(f"Markdown 文件已生成: {output_path}")
+    logger.info("视频列表提取完成")
     logger.info("=" * 50)
-    return str(output_path)
+
+    # 打印摘要
+    for i, v in enumerate(videos[:10]):
+        logger.info(f"  [{i+1}] {v['title'][:50]}... | UP: {v.get('up_name', '?')} | 播放: {v.get('play', '?')}")
+
+    return videos
 
 
 if __name__ == "__main__":
-    result_path = main()
-    print(f"\n输出文件: {result_path}")
+    main()
