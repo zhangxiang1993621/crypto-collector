@@ -8,6 +8,7 @@
     python us_stock_scraper/us_stock_scraper.py                  # 仅采集打印
     python us_stock_scraper/us_stock_scraper.py --save           # 采集并保存图表
     python us_stock_scraper/us_stock_scraper.py --save --upload  # 保存图表并上传 Supabase
+    python us_stock_scraper/us_stock_scraper.py --save --upload --backfill 5  # 上传 + 补最近 5 天缺失数据
 """
 
 import os
@@ -448,6 +449,276 @@ def upload_to_supabase(data_list: list[dict]) -> dict:
     return {"symbols": symbols_count, "bars": bars_count, "trends": trends_count}
 
 
+# ────────────────────── 数据补缺 ──────────────────────
+
+
+def _get_trading_days(days_back: int) -> list[str]:
+    """生成过去 N 个美股交易日列表（跳过周末）
+
+    Args:
+        days_back: 往回看的交易日数量（如 5 表示最近 5 个交易日）
+
+    Returns:
+        ["2026-06-12", "2026-06-11", ...] 按日期倒序
+    """
+    trading_days: list[str] = []
+    today = datetime.now(timezone.utc).date()
+    cursor = today
+    while len(trading_days) < days_back:
+        if cursor.weekday() < 5:  # 周一到周五
+            trading_days.append(cursor.isoformat())
+        cursor -= timedelta(days=1)
+    return trading_days
+
+
+def detect_gaps(client: "Client", lookback_days: int) -> dict[str, list[str]]:
+    """检测每个标的在最近 N 个交易日中的缺失日期
+
+    对 us_stock_bars 表按 symbol + 日期分组统计，找出 bar 数为 0 的交易日。
+
+    Args:
+        client: Supabase 客户端
+        lookback_days: 往回检查多少个交易日
+
+    Returns:
+        {"AAPL": ["2026-06-12", "2026-06-10"], "^GSPC": ["2026-06-11"]}
+    """
+    trading_days = _get_trading_days(lookback_days)
+    if not trading_days:
+        return {}
+
+    earliest = trading_days[-1]  # 最早的日期
+    logger.info(f"检测 {lookback_days} 个交易日 ({earliest} ~ {trading_days[0]}) 的数据缺失情况...")
+
+    # 一次性查出所有 symbol 在这段时间内的 bar
+    all_symbols = [s["symbol"] for s in INDICES] + [s["symbol"] for s in STOCKS]
+    gaps: dict[str, list[str]] = {}
+
+    for sym in all_symbols:
+        # 优先用 Supabase RPC 高效检测，不可用时降级客户端侧逐日查询
+        rpc_ok = False
+        try:
+            r = client.rpc(
+                "get_missing_trading_days",
+                {
+                    "p_symbol": sym,
+                    "p_start_date": earliest,
+                    "p_end_date": trading_days[0],
+                },
+            ).execute()
+
+            if r.data:
+                missing = [row["trade_date"] for row in r.data]
+                if missing:
+                    gaps[sym] = missing
+                    logger.info(f"  {sym}: 缺 {len(missing)} 天 → {missing}")
+                else:
+                    logger.debug(f"  {sym}: 完整")
+                rpc_ok = True
+        except Exception:
+            pass  # RPC 不可用，降级客户端侧
+
+        if not rpc_ok:
+            gaps[sym] = _detect_gaps_client_side(client, sym, trading_days)
+
+    return gaps
+
+
+def _detect_gaps_client_side(
+    client: "Client", symbol: str, trading_days: list[str]
+) -> list[str]:
+    """客户端侧补缺检测：逐日查询 us_stock_bars 是否有数据
+
+    当 Supabase RPC 不存在时使用的兜底方案。
+    """
+    missing: list[str] = []
+    for day in trading_days:
+        day_start = f"{day}T00:00:00+00:00"
+        day_end = f"{day}T23:59:59+00:00"
+        r = client.table("us_stock_bars").select(
+            "id", count="exact"
+        ).eq("symbol", symbol).gte("bar_time", day_start).lte(
+            "bar_time", day_end
+        ).limit(1).execute()
+        if r.count == 0:
+            missing.append(day)
+    return missing
+
+
+def _fetch_for_date(browser_page, symbol: str, target_date: str) -> dict:
+    """从 Yahoo Finance 拉取指定交易日的美股 1 分钟 K 线
+
+    Args:
+        browser_page: CloakBrowser / Playwright 页面对象
+        symbol: 标的代码
+        target_date: "2026-06-12" 格式
+
+    Returns:
+        与 fetch_single 相同结构的 dict
+    """
+    try:
+        dt_target = datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return {"symbol": symbol, "data": None, "error": f"日期格式错误: {target_date}"}
+
+    start_ts = int(dt_target.timestamp())
+    end_ts = int((dt_target + timedelta(hours=30)).timestamp())  # 多给 6 小时 buffer
+
+    url = YF_CHART_API.format(symbol=symbol)
+    url += f"?period1={start_ts}&period2={end_ts}&interval=1m"
+
+    try:
+        browser_page.goto(url, timeout=20000)
+        content = browser_page.content()
+
+        json_match = re.search(r"<pre>(.*?)</pre>", content, re.DOTALL)
+        if not json_match:
+            return {"symbol": symbol, "data": None, "error": "响应非 JSON"}
+
+        raw = json.loads(json_match.group(1))
+        result_list = raw.get("chart", {}).get("result", [])
+        if not result_list:
+            return {"symbol": symbol, "data": None, "error": "API 返回空数据"}
+
+        ohlcv = result_list[0]
+        timestamps = ohlcv.get("timestamp", [])
+        quotes = ohlcv.get("indicators", {}).get("quote", [{}])[0]
+
+        opens = quotes.get("open", [])
+        highs = quotes.get("high", [])
+        lows = quotes.get("low", [])
+        closes = quotes.get("close", [])
+        volumes = quotes.get("volume", [])
+
+        if not timestamps or not closes:
+            return {"symbol": symbol, "data": None, "error": "无 OHLCV 数据"}
+
+        df = pd.DataFrame({
+            "Open": opens, "High": highs, "Low": lows,
+            "Close": closes, "Volume": volumes,
+        }, index=pd.to_datetime(timestamps, unit="s", utc=True))
+
+        df = df.dropna(subset=["Close"])
+        if df.empty:
+            return {"symbol": symbol, "data": None, "error": "有效数据为空"}
+
+        # 仅保留目标交易日的数据
+        df = df[df.index.date == dt_target.date()]
+        if df.empty:
+            return {"symbol": symbol, "data": None, "error": f"{target_date} 无交易数据"}
+
+        close = df["Close"]
+        return {
+            "symbol": symbol,
+            "data": df,
+            "latest_close": float(close.iloc[-1]),
+            "latest_time": df.index[-1].strftime("%Y-%m-%d %H:%M"),
+            "change_pct": float((close.iloc[-1] / close.iloc[0] - 1) * 100) if len(df) >= 2 else 0,
+        }
+    except Exception as e:
+        return {"symbol": symbol, "data": None, "error": str(e)}
+
+
+def fill_gaps(browser_page, lookback_days: int = 5) -> dict:
+    """补缺主流程：检测缺失 → 拉取历史数据 → 入库
+
+    Args:
+        browser_page: CloakBrowser 浏览器页面对象
+        lookback_days: 往回检查最近 N 个交易日
+
+    Returns:
+        {"filled_days": int, "filled_bars": int, "symbols_fixed": int, "missing": int}
+    """
+    logger.info(f"\n=== 数据补缺检查 (最近 {lookback_days} 个交易日) ===")
+
+    client = get_supabase_client()
+    if client is None:
+        logger.warning("无法连接 Supabase，跳过补缺")
+        return {"filled_days": 0, "filled_bars": 0, "symbols_fixed": 0, "missing": 0}
+
+    # Step 1: 检测缺失
+    gaps = detect_gaps(client, lookback_days)
+
+    total_missing = sum(len(days) for days in gaps.values())
+    if total_missing == 0:
+        logger.info("所有标的数据完整，无需补缺 ✓")
+        return {"filled_days": 0, "filled_bars": 0, "symbols_fixed": 0, "missing": 0}
+
+    logger.info(f"发现 {len(gaps)} 个标的存在数据缺失，共 {total_missing} 个交易日需要补全")
+
+    # Step 2: 拉取并入库
+    all_items = INDICES + STOCKS
+    symbol_name = {s["symbol"]: s["name"] for s in all_items}
+    symbol_type = {s["symbol"]: "index" if s["symbol"].startswith("^") else "stock" for s in all_items}
+
+    filled_bars = 0
+    filled_days = 0
+    symbols_fixed = 0
+    skipped = 0
+
+    for sym, missing_dates in gaps.items():
+        name = symbol_name.get(sym, sym)
+        item_type = symbol_type.get(sym, "stock")
+
+        for day in missing_dates:
+            logger.info(f"  补缺 {sym} ({name}) → {day}")
+            result = _fetch_for_date(browser_page, sym, day)
+
+            df = result.get("data")
+            if df is None or df.empty:
+                logger.warning(f"    {sym} {day}: 无数据可补 ({result.get('error', '')})")
+                skipped += 1
+                continue
+
+            # 组装 rows 并 upsert
+            rows = []
+            for idx, row in df.iterrows():
+                rows.append({
+                    "symbol": sym,
+                    "name": name,
+                    "type": item_type,
+                    "bar_time": idx.isoformat(),
+                    "open": float(row["Open"]) if pd.notna(row["Open"]) else None,
+                    "high": float(row["High"]) if pd.notna(row["High"]) else None,
+                    "low": float(row["Low"]) if pd.notna(row["Low"]) else None,
+                    "close": float(row["Close"]) if pd.notna(row["Close"]) else None,
+                    "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
+                })
+
+            # 分批 upsert
+            upserted = 0
+            for i in range(0, len(rows), BATCH_SIZE):
+                batch = rows[i:i + BATCH_SIZE]
+                try:
+                    client.table("us_stock_bars").upsert(
+                        batch, on_conflict="symbol,bar_time"
+                    ).execute()
+                    upserted += len(batch)
+                except Exception as e:
+                    logger.error(f"    补缺入库失败 [{sym} {day} batch {i}]: {e}")
+
+            filled_bars += upserted
+            filled_days += 1
+            symbols_fixed += 1
+            logger.info(f"    {sym} {day}: 补入 {upserted} 条 K 线 ✓")
+
+            time.sleep(1.2)  # 控制请求频率
+
+    # Step 3: 汇总
+    logger.info(
+        f"\n补缺完成: 修复 {symbols_fixed} 个标的, "
+        f"填补 {filled_days} 个交易日, "
+        f"入库 {filled_bars} 条 K 线, "
+        f"跳过 {skipped} 天（无数据）"
+    )
+    return {
+        "filled_days": filled_days,
+        "filled_bars": filled_bars,
+        "symbols_fixed": symbols_fixed,
+        "missing": skipped,
+    }
+
+
 # ────────────────────── 控制台输出 ──────────────────────
 
 def print_summary(data_list: list[dict], category: str) -> None:
@@ -475,7 +746,7 @@ def print_summary(data_list: list[dict], category: str) -> None:
 
 # ────────────────────── 主流程 ──────────────────────
 
-def run(save: bool = False, upload: bool = False) -> None:
+def run(save: bool = False, upload: bool = False, backfill_days: int = 0) -> None:
     logger.info("=== 美股分钟级数据采集 + K线图生成 ===")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -538,6 +809,16 @@ def run(save: bool = False, upload: bool = False) -> None:
     finally:
         browser.close()
 
+    # ── 第五部份：数据补缺（检测缺失的交易日并回填）──
+    if backfill_days > 0 and upload:
+        # 独立打开浏览器做补缺请求
+        bf_browser = launch(headless=True)
+        bf_page = bf_browser.new_page()
+        try:
+            fill_gaps(bf_page, lookback_days=backfill_days)
+        finally:
+            bf_browser.close()
+
     total_ok = sum(1 for d in all_data if d.get("data") is not None)
     logger.info(f"\n=== 完成 === 图表 {charts_ok} 张, 有效数据 {total_ok}/{len(all_data)} 条")
 
@@ -546,8 +827,12 @@ def main():
     parser = argparse.ArgumentParser(description="美股分钟级数据采集 + K线图生成")
     parser.add_argument("--save", action="store_true", help="保存图表和 JSON 到 output/ 目录")
     parser.add_argument("--upload", action="store_true", help="上传数据到 Supabase (us_stock_bars + us_stock_trends)")
+    parser.add_argument(
+        "--backfill", type=int, default=0, metavar="N",
+        help="检测并补全最近 N 个交易日缺失的 K 线数据（需配合 --upload）",
+    )
     args = parser.parse_args()
-    run(save=args.save, upload=args.upload)
+    run(save=args.save, upload=args.upload, backfill_days=args.backfill)
 
 
 if __name__ == "__main__":

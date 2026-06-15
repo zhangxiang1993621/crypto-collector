@@ -251,4 +251,4 @@ jobs:
         pip install -r requirements.txt
         cloakbrowser install || echo "CloakBrowser verify skipped (segfault in CI, binary ready)"
     - name: US Stock Scraper
-      run: python us_stock_scraper/us_stock_scraper.py --save --upload
+      run: python us_stock_scraper/us_stock_scraper.py --save --upload --backfill 3
