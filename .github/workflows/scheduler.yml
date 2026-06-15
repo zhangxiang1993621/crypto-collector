@@ -1,7 +1,6 @@
 name: Crypto Collector
 true:
   schedule:
-  - cron: '*/30 * * * *'
   - cron: 0 */2 * * *
   - cron: 0 8 * * *
   - cron: 0 10 * * *
@@ -14,25 +13,6 @@ true:
   - cron: 30 21 * * 1-5
   workflow_dispatch: null
 jobs:
-  collect:
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    - name: Install dependencies
-      run: pip install -r requirements.txt
-    - name: Run collector
-      env:
-        COINCAP_API_KEY: ${{ secrets.COINCAP_API_KEY }}
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      run: python price_collector/main.py
   news:
     runs-on: ubuntu-latest
     env:
