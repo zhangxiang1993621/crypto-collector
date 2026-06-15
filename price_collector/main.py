@@ -31,8 +31,8 @@ if not SUPABASE_URL:
 if not SUPABASE_KEY:
     _missing.append("SUPABASE_SERVICE_ROLE_KEY")
 if _missing:
-    logger.error(f"缺少环境变量: {', '.join(_missing)}")
-    sys.exit(1)
+    logger.error(f"缺少环境变量: {', '.join(_missing)}，跳过采集")
+    sys.exit(0)
 
 
 def fetch_all_assets() -> list[dict]:
