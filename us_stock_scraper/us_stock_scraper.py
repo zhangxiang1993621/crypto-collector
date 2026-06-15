@@ -1,14 +1,13 @@
-"""美股数据采集 + 分钟K线图生成
+"""美股数据采集
 
 功能：通过 CloakBrowser 反检测浏览器访问 Yahoo Finance chart API，
-      采集美股主要指数和重要个股最近一个交易日的 1 分钟 OHLCV 数据，
-      生成分钟K线图并保存到 output/ 目录，支持上传到 Supabase。
+      采集美股主要指数和重要个股最近一个交易日的 1 分钟 OHLCV 数据并入库 Supabase，
+      支持检测并补全缺失的历史交易日数据。
 
 用法：
-    python us_stock_scraper/us_stock_scraper.py                  # 仅采集打印
-    python us_stock_scraper/us_stock_scraper.py --save           # 采集并保存图表
-    python us_stock_scraper/us_stock_scraper.py --save --upload  # 保存图表并上传 Supabase
-    python us_stock_scraper/us_stock_scraper.py --save --upload --backfill 5  # 上传 + 补最近 5 天缺失数据
+    python us_stock_scraper/us_stock_scraper.py                     # 仅采集打印
+    python us_stock_scraper/us_stock_scraper.py --upload            # 采集并上传 Supabase
+    python us_stock_scraper/us_stock_scraper.py --upload --backfill 5  # 上传 + 补最近 5 天缺失数据
 """
 
 import os
@@ -26,10 +25,6 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
-import mplfinance as mpf
-import matplotlib
-matplotlib.use("Agg")  # 无 GUI 后端
-import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from supabase_client import get_client
 from cloakbrowser import launch
@@ -49,8 +44,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
-
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 # ────────────────────── 指数列表 ──────────────────────
 INDICES = [
@@ -90,21 +83,6 @@ STOCKS = [
 
 # Yahoo Finance chart API
 YF_CHART_API = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-
-# ────────────────────── 通用 K 线配色（美股：红涨绿跌） ──────────────────────
-MC = mpf.make_marketcolors(
-    up="red", down="green",
-    edge="inherit",
-    wick="inherit",
-    volume="inherit",
-)
-STYLE = mpf.make_mpf_style(
-    marketcolors=MC,
-    gridstyle="--",
-    y_on_right=False,
-    base_mpf_style="charles",
-)
-
 
 # ────────────────────── 数据获取 ──────────────────────
 
@@ -201,111 +179,6 @@ def collect_symbols(browser_page, items: list[dict]) -> list[dict]:
             time.sleep(0.8)
 
     return results
-
-
-# ────────────────────── 图表生成 ──────────────────────
-
-def generate_chart(info: dict, filepath: str) -> bool:
-    """生成单个标的的分钟K线图并保存"""
-    df = info.get("data")
-    if df is None or df.empty:
-        return False
-
-    symbol = info.get("symbol", "")
-    raw_name = info.get("name", symbol)
-    en_name = re.sub(r"[\u4e00-\u9fff]+", "", raw_name).strip() or symbol
-    latest_close = info.get("latest_close", 0)
-    latest_time = info.get("latest_time", "")
-    change = info.get("change_pct", 0)
-
-    title = f"{en_name} ({symbol})  1-min Candles"
-    subtitle = f"{latest_time}  Close {latest_close:.2f}  Intraday Change {change:+.2f}%"
-    full_title = f"{title}\n{subtitle}"
-
-    try:
-        fig, axes = mpf.plot(
-            df,
-            type="candle",
-            style=STYLE,
-            title=full_title,
-            ylabel="Price (USD)",
-            volume=True,
-            figsize=(16, 8),
-            savefig=filepath,
-            returnfig=True,
-            datetime_format="%H:%M",
-            xrotation=45,
-            tight_layout=True,
-        )
-        plt.close(fig)
-        return True
-    except Exception as e:
-        logger.error(f"  生成K线图失败 [{symbol}]: {e}")
-        return False
-
-
-def generate_index_comparison(index_data: list[dict], filepath: str) -> bool:
-    """生成主要指数归一化对比折线图"""
-    valid = [d for d in index_data if d.get("data") is not None and not d["data"].empty]
-    if len(valid) < 2:
-        return False
-
-    try:
-        fig, ax = plt.subplots(figsize=(14, 7))
-        for d in valid:
-            df = d["data"]
-            normalized = df["Close"] / df["Close"].iloc[0] * 100
-            raw_name = d.get("name", d["symbol"])
-            label = re.sub(r"[\u4e00-\u9fff]+", "", raw_name).strip() or d["symbol"]
-            ax.plot(df.index, normalized, label=label,
-                    linewidth=2, alpha=0.85)
-
-        ax.set_title("Major US Indices - Normalized Comparison (Base=100)", fontsize=15, fontweight="bold")
-        ax.set_ylabel("Normalized Price (Base=100)")
-        ax.legend(loc="upper left", fontsize=10)
-        ax.grid(True, linestyle="--", alpha=0.5)
-        fig.autofmt_xdate()
-        fig.tight_layout()
-        fig.savefig(filepath, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        return True
-    except Exception as e:
-        logger.error(f"  生成指数对比图失败: {e}")
-        return False
-
-
-def generate_summary_json(data_list: list[dict], filepath: str) -> None:
-    """生成当日分钟级汇总 JSON"""
-    summary = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-        "items": [],
-    }
-    for d in data_list:
-        df = d.get("data")
-        if df is None or df.empty:
-            summary["items"].append({
-                "symbol": d["symbol"],
-                "name": d.get("name", ""),
-                "error": d.get("error", "无数据"),
-            })
-            continue
-
-        close = df["Close"]
-        summary["items"].append({
-            "symbol": d["symbol"],
-            "name": d.get("name", ""),
-            "latest_time": df.index[-1].strftime("%Y-%m-%d %H:%M"),
-            "latest_close": round(float(close.iloc[-1]), 2),
-            "open": round(float(df["Open"].iloc[0]), 2),
-            "change_pct": round(float((close.iloc[-1] / close.iloc[0] - 1) * 100), 2) if len(df) >= 2 else 0,
-            "intraday_high": round(float(df["High"].max()), 2),
-            "intraday_low": round(float(df["Low"].min()), 2),
-            "volume_total": int(df["Volume"].sum()),
-            "bars_count": len(df),
-        })
-
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
 
 
 # ────────────────────── Supabase 入库 ──────────────────────
@@ -746,13 +619,10 @@ def print_summary(data_list: list[dict], category: str) -> None:
 
 # ────────────────────── 主流程 ──────────────────────
 
-def run(save: bool = False, upload: bool = False, backfill_days: int = 0) -> None:
-    logger.info("=== 美股分钟级数据采集 + K线图生成 ===")
+def run(upload: bool = False, backfill_days: int = 0) -> None:
+    logger.info("=== 美股分钟级数据采集 ===")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    all_data = []
-    charts_ok = 0
+    all_data: list[dict] = []
 
     logger.info("启动 CloakBrowser 反检测浏览器...")
     browser = launch(headless=True)
@@ -763,36 +633,12 @@ def run(save: bool = False, upload: bool = False, backfill_days: int = 0) -> Non
         logger.info("--- 采集主要指数 (5 个，1分钟K线) ---")
         index_data = collect_symbols(page, INDICES)
         print_summary(index_data, "主要指数")
-
-        if save and any(d.get("data") is not None for d in index_data):
-            comp_path = str(OUTPUT_DIR / f"us_indices_compare_{timestamp}.png")
-            if generate_index_comparison(index_data, comp_path):
-                logger.info(f"  指数对比图: {comp_path}")
-                charts_ok += 1
-
-            for d in index_data:
-                if d.get("data") is None:
-                    continue
-                sym_clean = d["symbol"].lstrip("^")
-                filepath = str(OUTPUT_DIR / f"us_index_{sym_clean}_{timestamp}.png")
-                if generate_chart(d, filepath):
-                    charts_ok += 1
-
         all_data.extend(index_data)
 
         # ── 第二部份：采集重要个股 ──
         logger.info("\n--- 采集重要个股 (20 个，1分钟K线) ---")
         stock_data = collect_symbols(page, STOCKS)
         print_summary(stock_data, "重要个股")
-
-        if save and any(d.get("data") is not None for d in stock_data):
-            for d in stock_data:
-                if d.get("data") is None:
-                    continue
-                filepath = str(OUTPUT_DIR / f"us_stock_{d['symbol']}_{timestamp}.png")
-                if generate_chart(d, filepath):
-                    charts_ok += 1
-
         all_data.extend(stock_data)
 
         # ── 第三部份：上传 Supabase ──
@@ -814,19 +660,18 @@ def run(save: bool = False, upload: bool = False, backfill_days: int = 0) -> Non
             bf_browser.close()
 
     total_ok = sum(1 for d in all_data if d.get("data") is not None)
-    logger.info(f"\n=== 完成 === 图表 {charts_ok} 张, 有效数据 {total_ok}/{len(all_data)} 条")
+    logger.info(f"\n=== 完成 === 有效数据 {total_ok}/{len(all_data)} 条")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="美股分钟级数据采集 + K线图生成")
-    parser.add_argument("--save", action="store_true", help="保存 K 线图到 output/ 目录")
+    parser = argparse.ArgumentParser(description="美股分钟级数据采集")
     parser.add_argument("--upload", action="store_true", help="上传数据到 Supabase (us_stock_bars + us_stock_trends)")
     parser.add_argument(
         "--backfill", type=int, default=0, metavar="N",
         help="检测并补全最近 N 个交易日缺失的 K 线数据（需配合 --upload）",
     )
     args = parser.parse_args()
-    run(save=args.save, upload=args.upload, backfill_days=args.backfill)
+    run(upload=args.upload, backfill_days=args.backfill)
 
 
 if __name__ == "__main__":

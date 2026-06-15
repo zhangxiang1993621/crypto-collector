@@ -254,4 +254,4 @@ jobs:
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      run: python us_stock_scraper/us_stock_scraper.py --save --upload --backfill 3
+      run: python us_stock_scraper/us_stock_scraper.py --upload --backfill 3
