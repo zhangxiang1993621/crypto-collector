@@ -57,66 +57,63 @@ OUTPUT_DIR = Path(__file__).parent.parent / "output"
 # ────────────────────── 国家队国旗映射 ──────────────────────
 
 # 2026 世界杯 48 支参赛队伍：英文名 → {国旗 emoji, 中文国名}
+# 2026 世界杯 48 支参赛队伍：英文名（FIFA API ExternalName）→ {国旗 emoji, 中文国名}
 TEAM_FLAGS: dict[str, dict[str, str]] = {
-    # ── AFC 亚洲 8 队 ──
+    # ── AFC 亚洲（9 队）──
     "Australia":       {"flag": "🇦🇺", "country": "澳大利亚"},
+    "IR Iran":         {"flag": "🇮🇷", "country": "伊朗"},
     "Iran":            {"flag": "🇮🇷", "country": "伊朗"},
+    "Iraq":            {"flag": "🇮🇶", "country": "伊拉克"},
     "Japan":           {"flag": "🇯🇵", "country": "日本"},
+    "Jordan":          {"flag": "🇯🇴", "country": "约旦"},
+    "Korea Republic":  {"flag": "🇰🇷", "country": "韩国"},
     "Qatar":           {"flag": "🇶🇦", "country": "卡塔尔"},
     "Saudi Arabia":    {"flag": "🇸🇦", "country": "沙特阿拉伯"},
-    "Korea Republic":  {"flag": "🇰🇷", "country": "韩国"},
-    "South Korea":     {"flag": "🇰🇷", "country": "韩国"},
-    "United Arab Emirates": {"flag": "🇦🇪", "country": "阿联酋"},
-    "UAE":             {"flag": "🇦🇪", "country": "阿联酋"},
     "Uzbekistan":      {"flag": "🇺🇿", "country": "乌兹别克斯坦"},
-    # ── CAF 非洲 9 队 ──
+    # ── CAF 非洲（10 队）──
     "Algeria":         {"flag": "🇩🇿", "country": "阿尔及利亚"},
-    "Cameroon":        {"flag": "🇨🇲", "country": "喀麦隆"},
+    "Cabo Verde":      {"flag": "🇨🇻", "country": "佛得角"},
+    "Congo DR":        {"flag": "🇨🇩", "country": "刚果(金)"},
     "Côte d'Ivoire":   {"flag": "🇨🇮", "country": "科特迪瓦"},
     "Egypt":           {"flag": "🇪🇬", "country": "埃及"},
     "Ghana":           {"flag": "🇬🇭", "country": "加纳"},
     "Morocco":         {"flag": "🇲🇦", "country": "摩洛哥"},
-    "Nigeria":         {"flag": "🇳🇬", "country": "尼日利亚"},
     "Senegal":         {"flag": "🇸🇳", "country": "塞内加尔"},
     "South Africa":    {"flag": "🇿🇦", "country": "南非"},
-    # ── CONCACAF 北美 6 队 ──
+    "Tunisia":         {"flag": "🇹🇳", "country": "突尼斯"},
+    # ── CONCACAF 北美（6 队）──
     "Canada":          {"flag": "🇨🇦", "country": "加拿大"},
-    "Costa Rica":      {"flag": "🇨🇷", "country": "哥斯达黎加"},
-    "Jamaica":         {"flag": "🇯🇲", "country": "牙买加"},
+    "Curaçao":         {"flag": "🇨🇼", "country": "库拉索"},
+    "Haiti":           {"flag": "🇭🇹", "country": "海地"},
     "Mexico":          {"flag": "🇲🇽", "country": "墨西哥"},
     "Panama":          {"flag": "🇵🇦", "country": "巴拿马"},
-    "United States":   {"flag": "🇺🇸", "country": "美国"},
     "USA":             {"flag": "🇺🇸", "country": "美国"},
-    # ── CONMEBOL 南美 8 队 ──
+    # ── CONMEBOL 南美（6 队）──
     "Argentina":       {"flag": "🇦🇷", "country": "阿根廷"},
     "Brazil":          {"flag": "🇧🇷", "country": "巴西"},
-    "Chile":           {"flag": "🇨🇱", "country": "智利"},
     "Colombia":        {"flag": "🇨🇴", "country": "哥伦比亚"},
     "Ecuador":         {"flag": "🇪🇨", "country": "厄瓜多尔"},
     "Paraguay":        {"flag": "🇵🇾", "country": "巴拉圭"},
-    "Peru":            {"flag": "🇵🇪", "country": "秘鲁"},
     "Uruguay":         {"flag": "🇺🇾", "country": "乌拉圭"},
-    # ── OFC 大洋洲 1 队 ──
+    # ── OFC 大洋洲（1 队）──
     "New Zealand":     {"flag": "🇳🇿", "country": "新西兰"},
-    # ── UEFA 欧洲 16 队 ──
+    # ── UEFA 欧洲（16 队）──
     "Austria":         {"flag": "🇦🇹", "country": "奥地利"},
     "Belgium":         {"flag": "🇧🇪", "country": "比利时"},
+    "Bosnia and Herzegovina": {"flag": "🇧🇦", "country": "波黑"},
     "Croatia":         {"flag": "🇭🇷", "country": "克罗地亚"},
-    "Denmark":         {"flag": "🇩🇰", "country": "丹麦"},
-    "England":         {"flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "country": "英格兰"},
+    "Czechia":         {"flag": "🇨🇿", "country": "捷克"},
+    "England":         {"flag": "🏴", "country": "英格兰"},
     "France":          {"flag": "🇫🇷", "country": "法国"},
     "Germany":         {"flag": "🇩🇪", "country": "德国"},
-    "Greece":          {"flag": "🇬🇷", "country": "希腊"},
-    "Italy":           {"flag": "🇮🇹", "country": "意大利"},
     "Netherlands":     {"flag": "🇳🇱", "country": "荷兰"},
-    "Poland":          {"flag": "🇵🇱", "country": "波兰"},
+    "Norway":          {"flag": "🇳🇴", "country": "挪威"},
     "Portugal":        {"flag": "🇵🇹", "country": "葡萄牙"},
-    "Scotland":        {"flag": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "country": "苏格兰"},
-    "Serbia":          {"flag": "🇷🇸", "country": "塞尔维亚"},
+    "Scotland":        {"flag": "🏴", "country": "苏格兰"},
     "Spain":           {"flag": "🇪🇸", "country": "西班牙"},
     "Sweden":          {"flag": "🇸🇪", "country": "瑞典"},
     "Switzerland":     {"flag": "🇨🇭", "country": "瑞士"},
-    "Ukraine":         {"flag": "🇺🇦", "country": "乌克兰"},
+    "Türkiye":         {"flag": "🇹🇷", "country": "土耳其"},
 }
 
 
@@ -130,17 +127,25 @@ def get_team_info(team_name: str) -> tuple[str, str]:
         (flag_emoji, country_cn) 元组，未匹配时返回 ("🏳️", team_name)
     """
     # 精确匹配
+    # 过滤占位符（如 "1A", "W73", "FINAL", "FIXTURE" 等）
+    if not team_name or team_name[0].isdigit() or team_name.startswith("W") or team_name in ("FINAL", "FIXTURE", "BRONZE"):
+        return "🏳️", team_name
+
     if team_name in TEAM_FLAGS:
         info = TEAM_FLAGS[team_name]
         return info["flag"], info["country"]
 
-    # 大小写不敏感匹配
     lower_name = team_name.lower()
     for key, info in TEAM_FLAGS.items():
         if key.lower() == lower_name:
             return info["flag"], info["country"]
 
-    logger.debug(f"  未匹配国旗映射: {team_name}")
+    # 子串兜底（如 "IR Iran" 含 "Iran"）
+    for key, info in TEAM_FLAGS.items():
+        if key.lower() in lower_name or lower_name in key.lower():
+            return info["flag"], info["country"]
+
+    logger.warning(f"  未匹配国旗映射: {team_name}")
     return "🏳️", team_name
 
 
