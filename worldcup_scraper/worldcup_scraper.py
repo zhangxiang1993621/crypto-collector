@@ -54,6 +54,95 @@ SOHU_WC_SCORES = "https://sports.sohu.com/s/2026shijiebei/"
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
+# ────────────────────── 国家队国旗映射 ──────────────────────
+
+# 2026 世界杯 48 支参赛队伍：英文名 → {国旗 emoji, 中文国名}
+TEAM_FLAGS: dict[str, dict[str, str]] = {
+    # ── AFC 亚洲 8 队 ──
+    "Australia":       {"flag": "🇦🇺", "country": "澳大利亚"},
+    "Iran":            {"flag": "🇮🇷", "country": "伊朗"},
+    "Japan":           {"flag": "🇯🇵", "country": "日本"},
+    "Qatar":           {"flag": "🇶🇦", "country": "卡塔尔"},
+    "Saudi Arabia":    {"flag": "🇸🇦", "country": "沙特阿拉伯"},
+    "Korea Republic":  {"flag": "🇰🇷", "country": "韩国"},
+    "South Korea":     {"flag": "🇰🇷", "country": "韩国"},
+    "United Arab Emirates": {"flag": "🇦🇪", "country": "阿联酋"},
+    "UAE":             {"flag": "🇦🇪", "country": "阿联酋"},
+    "Uzbekistan":      {"flag": "🇺🇿", "country": "乌兹别克斯坦"},
+    # ── CAF 非洲 9 队 ──
+    "Algeria":         {"flag": "🇩🇿", "country": "阿尔及利亚"},
+    "Cameroon":        {"flag": "🇨🇲", "country": "喀麦隆"},
+    "Côte d'Ivoire":   {"flag": "🇨🇮", "country": "科特迪瓦"},
+    "Egypt":           {"flag": "🇪🇬", "country": "埃及"},
+    "Ghana":           {"flag": "🇬🇭", "country": "加纳"},
+    "Morocco":         {"flag": "🇲🇦", "country": "摩洛哥"},
+    "Nigeria":         {"flag": "🇳🇬", "country": "尼日利亚"},
+    "Senegal":         {"flag": "🇸🇳", "country": "塞内加尔"},
+    "South Africa":    {"flag": "🇿🇦", "country": "南非"},
+    # ── CONCACAF 北美 6 队 ──
+    "Canada":          {"flag": "🇨🇦", "country": "加拿大"},
+    "Costa Rica":      {"flag": "🇨🇷", "country": "哥斯达黎加"},
+    "Jamaica":         {"flag": "🇯🇲", "country": "牙买加"},
+    "Mexico":          {"flag": "🇲🇽", "country": "墨西哥"},
+    "Panama":          {"flag": "🇵🇦", "country": "巴拿马"},
+    "United States":   {"flag": "🇺🇸", "country": "美国"},
+    "USA":             {"flag": "🇺🇸", "country": "美国"},
+    # ── CONMEBOL 南美 8 队 ──
+    "Argentina":       {"flag": "🇦🇷", "country": "阿根廷"},
+    "Brazil":          {"flag": "🇧🇷", "country": "巴西"},
+    "Chile":           {"flag": "🇨🇱", "country": "智利"},
+    "Colombia":        {"flag": "🇨🇴", "country": "哥伦比亚"},
+    "Ecuador":         {"flag": "🇪🇨", "country": "厄瓜多尔"},
+    "Paraguay":        {"flag": "🇵🇾", "country": "巴拉圭"},
+    "Peru":            {"flag": "🇵🇪", "country": "秘鲁"},
+    "Uruguay":         {"flag": "🇺🇾", "country": "乌拉圭"},
+    # ── OFC 大洋洲 1 队 ──
+    "New Zealand":     {"flag": "🇳🇿", "country": "新西兰"},
+    # ── UEFA 欧洲 16 队 ──
+    "Austria":         {"flag": "🇦🇹", "country": "奥地利"},
+    "Belgium":         {"flag": "🇧🇪", "country": "比利时"},
+    "Croatia":         {"flag": "🇭🇷", "country": "克罗地亚"},
+    "Denmark":         {"flag": "🇩🇰", "country": "丹麦"},
+    "England":         {"flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "country": "英格兰"},
+    "France":          {"flag": "🇫🇷", "country": "法国"},
+    "Germany":         {"flag": "🇩🇪", "country": "德国"},
+    "Greece":          {"flag": "🇬🇷", "country": "希腊"},
+    "Italy":           {"flag": "🇮🇹", "country": "意大利"},
+    "Netherlands":     {"flag": "🇳🇱", "country": "荷兰"},
+    "Poland":          {"flag": "🇵🇱", "country": "波兰"},
+    "Portugal":        {"flag": "🇵🇹", "country": "葡萄牙"},
+    "Scotland":        {"flag": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "country": "苏格兰"},
+    "Serbia":          {"flag": "🇷🇸", "country": "塞尔维亚"},
+    "Spain":           {"flag": "🇪🇸", "country": "西班牙"},
+    "Sweden":          {"flag": "🇸🇪", "country": "瑞典"},
+    "Switzerland":     {"flag": "🇨🇭", "country": "瑞士"},
+    "Ukraine":         {"flag": "🇺🇦", "country": "乌克兰"},
+}
+
+
+def get_team_info(team_name: str) -> tuple[str, str]:
+    """根据英文队名查找国旗和中文名
+
+    Args:
+        team_name: FIFA API 返回的英文队名，如 "Brazil"、"Korea Republic"
+
+    Returns:
+        (flag_emoji, country_cn) 元组，未匹配时返回 ("🏳️", team_name)
+    """
+    # 精确匹配
+    if team_name in TEAM_FLAGS:
+        info = TEAM_FLAGS[team_name]
+        return info["flag"], info["country"]
+
+    # 大小写不敏感匹配
+    lower_name = team_name.lower()
+    for key, info in TEAM_FLAGS.items():
+        if key.lower() == lower_name:
+            return info["flag"], info["country"]
+
+    logger.debug(f"  未匹配国旗映射: {team_name}")
+    return "🏳️", team_name
+
 
 # ────────────────────── 数据库工具 ──────────────────────
 
@@ -342,9 +431,11 @@ def _e(text: str) -> str:
 
 
 def build_post_html(m: dict) -> str:
-    """构建单场比赛的帖子 HTML"""
+    """构建单场比赛的帖子 HTML（含国旗、中文国名）"""
     host = _e(m["host_team"])
     away = _e(m["away_team"])
+    host_flag, host_country = get_team_info(m["host_team"])
+    away_flag, away_country = get_team_info(m["away_team"])
     venue = _e(f"{m['venue']} ({m['town']}, {m['country']})")
     stage = _e(m["stage"].replace("GROUP STAGE MATCHES", "小组赛"))
     stage_label = "小组赛" if "GROUP" in m["stage"] else "淘汰赛"
@@ -377,16 +468,20 @@ def build_post_html(m: dict) -> str:
   <span style="font-size:14px;color:#889;">{_e(date_time)}</span>
 </div>
 
-<div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
-  <div style="text-align:center;min-width:100px;">
-    <div style="font-size:42px;font-weight:bold;color:#fff;line-height:1.2;">{host}{winner_indicator}</div>
+<div style="display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
+  <div style="text-align:center;min-width:120px;">
+    <div style="font-size:40px;line-height:1;">{host_flag}</div>
+    <div style="font-size:32px;font-weight:bold;color:#fff;line-height:1.3;">{host}{winner_indicator}</div>
+    <div style="font-size:13px;color:#889;margin-top:2px;">{_e(host_country)}</div>
   </div>
   <div style="text-align:center;min-width:80px;">
     <div style="font-size:48px;font-weight:bold;color:{score_color};line-height:1;">{score_text}</div>
     <div style="font-size:11px;color:#889;margin-top:4px;">{status}</div>
   </div>
-  <div style="text-align:center;min-width:100px;">
-    <div style="font-size:42px;font-weight:bold;color:#fff;line-height:1.2;">{away}{loser_indicator}</div>
+  <div style="text-align:center;min-width:120px;">
+    <div style="font-size:40px;line-height:1;">{away_flag}</div>
+    <div style="font-size:32px;font-weight:bold;color:#fff;line-height:1.3;">{away}{loser_indicator}</div>
+    <div style="font-size:13px;color:#889;margin-top:2px;">{_e(away_country)}</div>
   </div>
 </div>
 
