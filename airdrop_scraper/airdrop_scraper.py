@@ -521,6 +521,7 @@ def run(save: bool = False, max_items: int = 20):
 
             client.table("posts").update({
                 "content": new_content,
+                "is_hot": True,
                 "updated_at": now_utc.isoformat(),
             }).eq("id", existing_post["id"]).execute()
 
@@ -537,6 +538,7 @@ def run(save: bool = False, max_items: int = 20):
                 "author_id": author["id"],
                 "category_id": cat_id,
                 "status": "published",
+                "is_hot": True,
                 "created_at": now_utc.isoformat(),
                 "updated_at": now_utc.isoformat(),
             }).execute()
