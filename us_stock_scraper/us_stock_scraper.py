@@ -795,13 +795,7 @@ def run(save: bool = False, upload: bool = False, backfill_days: int = 0) -> Non
 
         all_data.extend(stock_data)
 
-        # ── 第三部份：保存汇总 JSON ──
-        if save:
-            json_path = str(OUTPUT_DIR / f"us_stock_summary_{timestamp}.json")
-            generate_summary_json(all_data, json_path)
-            logger.info(f"  汇总数据: {json_path}")
-
-        # ── 第四部份：上传 Supabase ──
+        # ── 第三部份：上传 Supabase ──
         if upload:
             result = upload_to_supabase(all_data)
             logger.info(f"  入库完成: symbols={result['symbols']}, bars={result['bars']}, trends={result['trends']}")
@@ -809,7 +803,7 @@ def run(save: bool = False, upload: bool = False, backfill_days: int = 0) -> Non
     finally:
         browser.close()
 
-    # ── 第五部份：数据补缺（检测缺失的交易日并回填）──
+    # ── 第四部份：数据补缺（检测缺失的交易日并回填）──
     if backfill_days > 0 and upload:
         # 独立打开浏览器做补缺请求
         bf_browser = launch(headless=True)
@@ -825,7 +819,7 @@ def run(save: bool = False, upload: bool = False, backfill_days: int = 0) -> Non
 
 def main():
     parser = argparse.ArgumentParser(description="美股分钟级数据采集 + K线图生成")
-    parser.add_argument("--save", action="store_true", help="保存图表和 JSON 到 output/ 目录")
+    parser.add_argument("--save", action="store_true", help="保存 K 线图到 output/ 目录")
     parser.add_argument("--upload", action="store_true", help="上传数据到 Supabase (us_stock_bars + us_stock_trends)")
     parser.add_argument(
         "--backfill", type=int, default=0, metavar="N",
