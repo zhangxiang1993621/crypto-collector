@@ -89,6 +89,8 @@ def _job_label(job_name: str) -> str:
         "bot_posts": "机器人观点发帖",
         "airdrop": "空投福利信息爬取",
         "indo_news": "印尼热点新闻抓取",
+        "esports": "印尼电子竞技新闻抓取",
+        "worldcup": "2026 世界杯比分更新",
         "tg_summary": "Telegram 群消息汇总 Bot",
         "us_stock": "美股数据采集 & 分钟K线图",
     }

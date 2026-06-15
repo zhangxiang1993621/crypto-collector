@@ -9,6 +9,8 @@ true:
   - cron: 30 */2 * * *
   - cron: 0 */6 * * *
   - cron: 0 7,19 * * *
+  - cron: 0 8,20 * * *
+  - cron: '*/30 * * * *'
   - cron: 30 21 * * 1-5
   workflow_dispatch: null
 jobs:
@@ -181,6 +183,49 @@ jobs:
         SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
       run: python indo_news_scraper/indo_news_scraper.py --save --max 15
+  esports:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Esports Scraper
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        ESPers_CATEGORY_NAME: ${{ vars.ESPers_CATEGORY_NAME }}
+      run: python esports_scraper/esports_scraper.py --save --max 10
+  worldcup:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: World Cup Scores
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+      run: python worldcup_scraper/worldcup_scraper.py --save --today --max 20
   us_stock:
     runs-on: ubuntu-latest
     env:
