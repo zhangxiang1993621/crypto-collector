@@ -1,5 +1,5 @@
 name: Crypto Collector
-true:
+on:
   schedule:
   - cron: '*/30 * * * *'
   - cron: 0 */2 * * *

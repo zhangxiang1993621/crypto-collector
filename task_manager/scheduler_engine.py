@@ -154,8 +154,13 @@ def sync_to_yaml(tasks: list[dict]) -> None:
     on_data = data.get("on") or data.get(True) or {}
     on_data["schedule"] = cron_list
 
+    # 写入临时内容
+    raw = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    # PyYAML 将 on 转为 true，需要修正回 on
+    raw = re.sub(r'^true:', 'on:', raw, flags=re.MULTILINE)
+
     with open(YAML_FILE, "w", encoding="utf-8") as f:
-        yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        f.write(raw)
     logger.info(f"已同步到 YAML: {YAML_FILE}")
 
 
