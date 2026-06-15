@@ -27,7 +27,7 @@ jobs:
       with:
         python-version: '3.11'
     - name: Install dependencies
-      run: pip install --pre -r requirements.txt
+      run: pip install -r requirements.txt
     - name: Run collector
       env:
         COINCAP_API_KEY: ${{ secrets.COINCAP_API_KEY }}
@@ -48,7 +48,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies
       run: |
-        pip install --pre -r requirements.txt
+        pip install -r requirements.txt
         playwright install chromium
     - name: Scrape and save posts
       env:
@@ -71,7 +71,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies
       run: |
-        pip install --pre -r requirements.txt
+        pip install -r requirements.txt
         playwright install chromium
     - name: Scrape FIFA schedule
       env:
@@ -94,7 +94,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies
       run: |
-        pip install --pre -r requirements.txt
+        pip install -r requirements.txt
         playwright install chromium
     - name: Scrape FIFA Blog
       env:
@@ -116,7 +116,7 @@ jobs:
       with:
         python-version: '3.11'
     - name: Install dependencies
-      run: pip install --pre -r requirements.txt
+      run: pip install -r requirements.txt
     - name: AI Digest
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -137,7 +137,7 @@ jobs:
       with:
         python-version: '3.11'
     - name: Install dependencies
-      run: pip install --pre -r requirements.txt
+      run: pip install -r requirements.txt
     - name: Bot Posts
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -158,7 +158,7 @@ jobs:
       with:
         python-version: '3.11'
     - name: Install dependencies
-      run: pip install --pre -r requirements.txt
+      run: pip install -r requirements.txt
     - name: Airdrop Scraper
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -178,7 +178,7 @@ jobs:
       with:
         python-version: '3.11'
     - name: Install dependencies
-      run: pip install --pre -r requirements.txt
+      run: pip install -r requirements.txt
     - name: Indo News Scraper
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -199,7 +199,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies
       run: |
-        pip install --pre -r requirements.txt
+        pip install -r requirements.txt
         playwright install chromium
     - name: Esports Scraper
       env:
@@ -221,7 +221,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies
       run: |
-        pip install --pre -r requirements.txt
+        pip install -r requirements.txt
         playwright install chromium
     - name: World Cup Scores
       env:
@@ -244,7 +244,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies
       run: |
-        pip install --pre -r requirements.txt
+        pip install -r requirements.txt
         cloakbrowser install
     - name: US Stock Scraper
       run: python us_stock_scraper/us_stock_scraper.py --save --upload
