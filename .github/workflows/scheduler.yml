@@ -242,9 +242,11 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    - name: Install dependencies
+    - name: Install system deps (Chromium)
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libcups2 libdrm2 libdbus-1-3 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 libx11-xcb1 libxcb-dri3-0
+    - name: Install Python deps
       run: |
         pip install -r requirements.txt
-        cloakbrowser install || echo "CloakBrowser install skipped (CI runner segfault)"
+        cloakbrowser install
     - name: US Stock Scraper
-      run: python us_stock_scraper/us_stock_scraper.py --save --upload || echo "美股采集跳过（无浏览器支持）"
+      run: python us_stock_scraper/us_stock_scraper.py --save --upload
