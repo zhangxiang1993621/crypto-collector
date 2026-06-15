@@ -545,8 +545,8 @@ def main():
     # 列表页抓取
     articles = scrape_binance_news(scroll_times=args.scroll, max_articles=args.max)
     if not articles:
-        logger.warning("未抓取到任何新闻")
-        sys.exit(1)
+        logger.warning("未抓取到任何新闻（本网络无法访问 www.binance.bh）")
+        return
 
     # 准备入库环境
     client = author_id = category_id = existing_titles = None

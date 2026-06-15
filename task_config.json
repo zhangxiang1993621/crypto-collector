@@ -153,6 +153,37 @@
     "working_dir": "d:\\agent-workspace\\crypto-collector\\tg_summary_bot"
   },
   {
+    "name": "esports",
+    "label": "印尼电子竞技新闻抓取",
+    "cron": "0 8,20 * * *",
+    "enabled": true,
+    "commands": [
+      "python esports_scraper/esports_scraper.py --save --max 10"
+    ],
+    "env_vars": {
+      "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
+      "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+      "ESPers_CATEGORY_NAME": "${{ vars.ESPers_CATEGORY_NAME }}"
+    },
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  },
+  {
+    "name": "worldcup",
+    "label": "2026 世界杯比分更新",
+    "cron": "*/30 * * * *",
+    "enabled": true,
+    "commands": [
+      "python worldcup_scraper/worldcup_scraper.py --save --today --max 20"
+    ],
+    "env_vars": {
+      "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
+      "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+      "FIFA_CATEGORY_NAME": "${{ vars.FIFA_CATEGORY_NAME }}",
+      "POSTS_AUTHOR_USERNAME": "${{ vars.POSTS_AUTHOR_USERNAME }}"
+    },
+    "working_dir": "d:\\agent-workspace\\crypto-collector"
+  },
+  {
     "name": "us_stock",
     "label": "美股数据采集 & 分钟K线图",
     "cron": "30 21 * * 1-5",

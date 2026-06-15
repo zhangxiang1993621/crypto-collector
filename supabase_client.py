@@ -50,5 +50,6 @@ def get_client() -> "Client":
         sys.exit(1)
 
     # trust_env=True → 读取系统代理/环境变量代理（本机需要代理访问外网）
-    http_client = httpx.Client(trust_env=True)
+    # timeout=60 → 代理环境网络波动较大，避免 ReadTimeout
+    http_client = httpx.Client(trust_env=True, timeout=60)
     return create_client(url, key, options=SyncClientOptions(httpx_client=http_client))
