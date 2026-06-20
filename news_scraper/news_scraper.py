@@ -385,7 +385,7 @@ def insert_one_post(client: "Client", article: dict, author_id: str, category_id
         "content": html_content,
         "author_id": author_id,
         "category_id": category_id,
-        "status": "published",
+        "status": "pending_review",
         "images": image_list,
         "is_hot": False,
         "is_pinned": False,

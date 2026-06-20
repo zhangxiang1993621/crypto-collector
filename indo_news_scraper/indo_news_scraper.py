@@ -474,7 +474,7 @@ def run(save: bool = False, max_items: int = 20):
                     "content": content,
                     "author_id": bot["id"],
                     "category_id": cat_id,
-                    "status": "published",
+                    "status": "pending_review",
                     "created_at": now,
                     "updated_at": now,
                 }).execute()

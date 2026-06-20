@@ -372,7 +372,7 @@ def insert_post(client: Client, title: str, content: str, author_id: str,
         "content": content,
         "author_id": author_id,
         "category_id": category_id,
-        "status": "published",
+        "status": "pending_review",
         "created_at": now,
         "updated_at": now,
     }).execute()

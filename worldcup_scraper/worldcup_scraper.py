@@ -569,7 +569,7 @@ def upsert_post(
             "content": content,
             "author_id": author_id,
             "category_id": cat_id,
-            "status": "published",
+            "status": "pending_review",
             "is_hot": is_hot,
             "created_at": now,
             "updated_at": now,
