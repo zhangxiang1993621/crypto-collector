@@ -166,7 +166,7 @@ def sync_to_yaml(tasks: list[dict]) -> None:
     with open(YAML_FILE, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
-    cron_list = [{"cron": t["cron"]} for t in tasks]
+    cron_list = [{"cron": t["cron"]} for t in tasks if t.get("cron")]  # 跳过手动任务
     # on 在 YAML 中被解析为布尔值 True
     on_data = data.get("on") or data.get(True) or {}
     on_data["schedule"] = cron_list

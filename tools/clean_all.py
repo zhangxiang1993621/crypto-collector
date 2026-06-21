@@ -28,13 +28,24 @@ DELETE_ORDER = [
 ]
 
 
+def table_exists(table_name: str) -> bool:
+    """检查表是否存在"""
+    try:
+        execute_sql(f'SELECT 1 FROM "{table_name}" LIMIT 0')
+        return True
+    except Exception:
+        return False
+
+
 def count_table(table_name: str) -> int:
     rows = execute_sql(f'SELECT COUNT(*) AS cnt FROM "{table_name}"')
     return rows[0]["cnt"] if rows else 0
 
 
 def delete_table(table_name: str) -> int:
-    """清空指定表，返回删除行数"""
+    """清空指定表，返回删除行数。表不存在返回 0。"""
+    if not table_exists(table_name):
+        return 0
     count = count_table(table_name)
     if count == 0:
         return 0
@@ -44,12 +55,17 @@ def delete_table(table_name: str) -> int:
 
 def delete_orphan_tags() -> int:
     """删除未被任何 post_tags 引用的孤儿标签"""
-    sql = """
-    DELETE FROM tags
-    WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags WHERE tag_id IS NOT NULL)
-    """
-    result = execute_sql(sql)
-    return result.rowcount if hasattr(result, 'rowcount') else 0
+    if not table_exists("tags") or not table_exists("post_tags"):
+        return 0
+    try:
+        sql = """
+        DELETE FROM tags
+        WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags WHERE tag_id IS NOT NULL)
+        """
+        result = execute_sql(sql)
+        return result.rowcount if hasattr(result, 'rowcount') else 0
+    except Exception:
+        return 0
 
 
 def run(dry_run: bool = False, skip_confirm: bool = False) -> None:
@@ -61,15 +77,22 @@ def run(dry_run: bool = False, skip_confirm: bool = False) -> None:
     print("\n📊 当前数据量：")
     total_rows = 0
     for name, table, label in DELETE_ORDER:
+        count = 0
         if name == "__orphan_tags__":
-            orphan_sql = """
-            SELECT COUNT(*) AS cnt FROM tags
-            WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags WHERE tag_id IS NOT NULL)
-            """
-            rows = execute_sql(orphan_sql)
-            count = rows[0]["cnt"] if rows else 0
+            try:
+                orphan_sql = """
+                SELECT COUNT(*) AS cnt FROM tags
+                WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags WHERE tag_id IS NOT NULL)
+                """
+                rows = execute_sql(orphan_sql)
+                count = rows[0]["cnt"] if rows else 0
+            except Exception:
+                pass
         else:
-            count = count_table(table)
+            if table_exists(table):
+                count = count_table(table)
+            else:
+                count = 0
         print(f"  {label:<20} {count:>8,} 行")
         total_rows += count
 
