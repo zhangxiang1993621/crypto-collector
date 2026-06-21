@@ -23,6 +23,8 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import httpx
 from dotenv import load_dotenv
 # 直连数据库（绕过 REST API 作业限制）
