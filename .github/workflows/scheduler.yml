@@ -36,7 +36,6 @@ jobs:
         DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
         INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
-        PINTU_CATEGORY_NAME: ${{ vars.PINTU_CATEGORY_NAME }}
       shell: bash
       run: |
         set +e
@@ -58,22 +57,6 @@ jobs:
 
         echo "::group::indo_news"
         python indo_news_scraper/indo_news_scraper.py --save --max 15 || echo "[FAIL] indo_news"
-        echo "::endgroup::"
-
-        echo "::group::pintu"
-        python pintu_scraper/pintu_scraper.py --save --max 15 || echo "[FAIL] pintu"
-        echo "::endgroup::"
-
-        echo "::group::tokocrypto"
-        python tokocrypto_scraper/tokocrypto_scraper.py --save --max 10 || echo "[FAIL] tokocrypto"
-        echo "::endgroup::"
-
-        echo "::group::indodax"
-        python indodax_scraper/indodax_scraper.py --save --max 15 || echo "[FAIL] indodax"
-        echo "::endgroup::"
-
-        echo "::group::mobee"
-        python mobee_scraper/mobee_scraper.py --save --max 10 || echo "[FAIL] mobee"
         echo "::endgroup::"
 
         echo ""
@@ -122,18 +105,6 @@ jobs:
 
         echo "::group::worldcup"
         python worldcup_scraper/worldcup_scraper.py --save --today --max 20 || echo "[FAIL] worldcup"
-        echo "::endgroup::"
-
-        echo "::group::osl"
-        python osl_scraper/osl_scraper.py --save --max 10 || echo "[FAIL] osl"
-        echo "::endgroup::"
-
-        echo "::group::bitget"
-        python bitget_scraper/bitget_scraper.py --save --max 10 || echo "[FAIL] bitget"
-        echo "::endgroup::"
-
-        echo "::group::okx"
-        python okx_scraper/okx_scraper.py --save --max 10 || echo "[FAIL] okx"
         echo "::endgroup::"
 
         echo ""

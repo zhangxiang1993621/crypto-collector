@@ -30,30 +30,28 @@ load_dotenv(dotenv_path=PROJECT_DIR / ".env")
 
 CONFIG_FILE = PROJECT_DIR / "task_config.json"
 YAML_FILE = PROJECT_DIR / ".github" / "workflows" / "scheduler.yml"
+YAML_INDO_FILE = PROJECT_DIR / ".github" / "workflows" / "scheduler_indo.yml"
 
 
 # ──────────────── 配置管理 ────────────────
 
-def import_from_yaml() -> list[dict]:
-    """从 GitHub Actions YAML 导入任务配置"""
-    if not YAML_FILE.exists():
+def _parse_yaml_jobs(yaml_path: Path) -> list[dict]:
+    """解析单个 YAML workflow 文件，提取任务列表"""
+    if not yaml_path.exists():
         return []
 
-    with open(YAML_FILE, "r", encoding="utf-8") as f:
+    with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     tasks = []
-    # on 在 YAML 中被解析为布尔值 True
     on_data = data.get("on") or data.get(True) or {}
     cron_list = on_data.get("schedule", [])
     jobs = data.get("jobs", {})
 
-    # 按顺序配对 cron 和 job
     job_items = list(jobs.items())
     for i, (job_name, job_def) in enumerate(job_items):
         cron = cron_list[i]["cron"] if i < len(cron_list) else "0 0 * * *"
 
-        # 提取 run 命令
         steps = job_def.get("steps", [])
         run_cmd = ""
         env_vars = {}
@@ -63,7 +61,6 @@ def import_from_yaml() -> list[dict]:
             if step.get("env"):
                 env_vars = step["env"]
 
-        # 拆分复合命令
         commands = [c.strip() for c in run_cmd.split(";") if c.strip()] if run_cmd else []
 
         tasks.append({
@@ -79,11 +76,22 @@ def import_from_yaml() -> list[dict]:
     return tasks
 
 
+def import_from_yaml() -> list[dict]:
+    """从所有 GitHub Actions YAML 导入任务配置"""
+    tasks = []
+    for yaml_path in [YAML_FILE, YAML_INDO_FILE]:
+        tasks.extend(_parse_yaml_jobs(yaml_path))
+    return tasks
+
+
 def _job_label(job_name: str) -> str:
     labels = {
         "scrape_api": "通用抓取（API/httpx）",
         "scrape_browser": "浏览器抓取（Playwright）",
         "us_stock": "美股数据采集 & 分钟K线",
+        "indo_twice_daily": "印尼-每日2次（Tokocrypto+Indodax）",
+        "indo_daily_httpx": "印尼-每日1次（Pintu+Mobee）",
+        "indo_daily_browser": "印尼-每日1次（OSL+Bitget+OKX）",
     }
     return labels.get(job_name, job_name)
 

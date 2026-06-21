@@ -1,0 +1,95 @@
+name: Indonesia Exchange Scrapers
+
+on:
+  schedule:
+  - cron: '0 7,19 * * *'   # 每日2次 (Indodax, Tokocrypto)
+  - cron: '0 8 * * *'      # 每日1次 (Pintu, OSL, Mobee, Bitget, OKX)
+  workflow_dispatch: null
+
+jobs:
+  # ──────────────── 每日2次（纯 httpx）───────────────
+  indo_twice_daily:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    - name: Tokocrypto + Indodax
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      shell: bash
+      run: |
+        set +e
+        echo "::group::tokocrypto"
+        python tokocrypto_scraper/tokocrypto_scraper.py --save --max 10 || echo "[FAIL] tokocrypto"
+        echo "::endgroup::"
+        echo "::group::indodax"
+        python indodax_scraper/indodax_scraper.py --save --max 15 || echo "[FAIL] indodax"
+        echo "::endgroup::"
+        echo "=== indo_twice_daily done ==="
+
+  # ──────────────── 每日1次（纯 httpx）───────────────
+  indo_daily_httpx:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    - name: Pintu + Mobee
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        PINTU_CATEGORY_NAME: ${{ vars.PINTU_CATEGORY_NAME }}
+      shell: bash
+      run: |
+        set +e
+        echo "::group::pintu"
+        python pintu_scraper/pintu_scraper.py --save --max 15 || echo "[FAIL] pintu"
+        echo "::endgroup::"
+        echo "::group::mobee"
+        python mobee_scraper/mobee_scraper.py --save --max 10 || echo "[FAIL] mobee"
+        echo "::endgroup::"
+        echo "=== indo_daily_httpx done ==="
+
+  # ──────────────── 每日1次（Playwright Chromium）───────────────
+  indo_daily_browser:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install deps + Chromium
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: OSL + Bitget + OKX
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      shell: bash
+      run: |
+        set +e
+        echo "::group::osl"
+        python osl_scraper/osl_scraper.py --save --max 10 || echo "[FAIL] osl"
+        echo "::endgroup::"
+        echo "::group::bitget"
+        python bitget_scraper/bitget_scraper.py --save --max 10 || echo "[FAIL] bitget"
+        echo "::endgroup::"
+        echo "::group::okx"
+        python okx_scraper/okx_scraper.py --save --max 10 || echo "[FAIL] okx"
+        echo "::endgroup::"
+        echo "=== indo_daily_browser done ==="
