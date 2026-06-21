@@ -48,11 +48,11 @@ jobs:
         echo "::endgroup::"
 
         echo "::group::ai_digest"
-        python ai_digest/ai_digest.py --save --max 10 || echo "[FAIL] ai_digest"
+        python news_scrapers/ai_digest/ai_digest.py --save --max 10 || echo "[FAIL] ai_digest"
         echo "::endgroup::"
 
         echo "::group::bot_posts"
-        python ai_digest/bot_posts.py --save --bots 5 || echo "[FAIL] bot_posts"
+        python news_scrapers/ai_digest/bot_posts.py --save --bots 5 || echo "[FAIL] bot_posts"
         echo "::endgroup::"
 
         echo "::group::indo_news"

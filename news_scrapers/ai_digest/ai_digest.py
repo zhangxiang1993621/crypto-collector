@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 import httpx
 from dotenv import load_dotenv
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # 直连数据库（绕过 REST API 作业限制）
 from db_direct import select_one, select_all, insert_one, execute_sql
 
