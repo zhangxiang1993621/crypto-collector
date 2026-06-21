@@ -5,3 +5,11 @@ __pycache__/
 *.db
 output/
 .codegraph/
+
+# IDE 配置
+.agents/
+.trae/
+skills-lock.json
+
+# 杂项
+Invoice-*.pdf
