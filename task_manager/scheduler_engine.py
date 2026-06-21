@@ -30,7 +30,6 @@ load_dotenv(dotenv_path=PROJECT_DIR / ".env")
 
 CONFIG_FILE = PROJECT_DIR / "task_config.json"
 YAML_FILE = PROJECT_DIR / ".github" / "workflows" / "scheduler.yml"
-YAML_INDO_FILE = PROJECT_DIR / ".github" / "workflows" / "scheduler_indo.yml"
 
 
 # ──────────────── 配置管理 ────────────────
@@ -77,21 +76,30 @@ def _parse_yaml_jobs(yaml_path: Path) -> list[dict]:
 
 
 def import_from_yaml() -> list[dict]:
-    """从所有 GitHub Actions YAML 导入任务配置"""
-    tasks = []
-    for yaml_path in [YAML_FILE, YAML_INDO_FILE]:
-        tasks.extend(_parse_yaml_jobs(yaml_path))
-    return tasks
+    """从 GitHub Actions YAML 导入任务配置"""
+    return _parse_yaml_jobs(YAML_FILE)
 
 
 def _job_label(job_name: str) -> str:
     labels = {
-        "scrape_api": "通用抓取（API/httpx）",
-        "scrape_browser": "浏览器抓取（Playwright）",
+        "price_collector": "加密货币价格采集",
+        "airdrop": "空投福利信息爬取",
+        "ai_digest": "AI 新闻摘要推送",
+        "bot_posts": "机器人观点发帖",
+        "indo_news": "印尼热点新闻抓取",
+        "tokocrypto": "Tokocrypto 活动抓取",
+        "indodax": "Indodax 博客抓取",
+        "pintu": "Pintu 新闻抓取",
+        "mobee": "Mobee 新闻抓取",
+        "news": "币安新闻抓取",
+        "fifa_schedule": "FIFA 赛程抓取",
+        "fifa_blog": "FIFA Blog 文章抓取",
+        "esports": "印尼电子竞技新闻抓取",
+        "worldcup": "世界杯比分更新",
+        "osl": "OSL 公告抓取",
+        "bitget": "Bitget 新闻抓取",
+        "okx": "OKX 公告抓取",
         "us_stock": "美股数据采集 & 分钟K线",
-        "indo_twice_daily": "印尼-每日2次（Tokocrypto+Indodax）",
-        "indo_daily_httpx": "印尼-每日1次（Pintu+Mobee）",
-        "indo_daily_browser": "印尼-每日1次（OSL+Bitget+OKX）",
     }
     return labels.get(job_name, job_name)
 
