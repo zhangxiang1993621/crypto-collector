@@ -31,7 +31,7 @@ DELETE_ORDER = [
 def table_exists(table_name: str) -> bool:
     """检查表是否存在"""
     try:
-        execute_sql(f'SELECT 1 FROM "{table_name}" LIMIT 0')
+        execute_sql(f'SELECT 1 FROM "{table_name}" LIMIT 0', fetch=False)
         return True
     except Exception:
         return False
@@ -49,7 +49,7 @@ def delete_table(table_name: str) -> int:
     count = count_table(table_name)
     if count == 0:
         return 0
-    execute_sql(f'DELETE FROM "{table_name}"')
+    execute_sql(f'DELETE FROM "{table_name}"', fetch=False)
     return count
 
 
@@ -62,7 +62,7 @@ def delete_orphan_tags() -> int:
         DELETE FROM tags
         WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags WHERE tag_id IS NOT NULL)
         """
-        result = execute_sql(sql)
+        result = execute_sql(sql, fetch=False)
         return result.rowcount if hasattr(result, 'rowcount') else 0
     except Exception:
         return 0
