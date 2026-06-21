@@ -22,16 +22,13 @@ COINCAP_API_URL = "https://rest.coincap.io/v3/assets"
 BATCH_SIZE = 200
 
 COINCAP_API_KEY = os.environ.get("COINCAP_API_KEY")
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_DB_PASSWORD = os.environ.get("SUPABASE_DB_PASSWORD")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 _missing = []
 if not COINCAP_API_KEY:
     _missing.append("COINCAP_API_KEY")
-if not SUPABASE_URL:
-    _missing.append("SUPABASE_URL")
-if not SUPABASE_DB_PASSWORD:
-    _missing.append("SUPABASE_DB_PASSWORD")
+if not DATABASE_URL:
+    _missing.append("DATABASE_URL")
 if _missing:
     logger.error(f"缺少环境变量: {', '.join(_missing)}，跳过采集")
     sys.exit(0)

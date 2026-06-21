@@ -288,8 +288,9 @@ def seed_symbols() -> int:
 
 def upload_to_supabase(data_list: list[dict]) -> dict:
     """将所有数据上传到 Supabase，返回上传统计"""
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        logger.warning("缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 环境变量，跳过入库")
+    # db_direct 自动通过 DATABASE_URL 或 SUPABASE_URL + SUPABASE_DB_PASSWORD 连接
+    if not os.environ.get("DATABASE_URL") and not (os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_DB_PASSWORD")):
+        logger.warning("缺少 DATABASE_URL 或 SUPABASE_URL + SUPABASE_DB_PASSWORD 环境变量，跳过入库")
         return {"symbols": 0, "bars": 0, "trends": 0}
 
     logger.info("上传数据到 Supabase...")
