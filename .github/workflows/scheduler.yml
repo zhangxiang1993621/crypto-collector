@@ -239,3 +239,105 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         PINTU_CATEGORY_NAME: ${{ vars.PINTU_CATEGORY_NAME }}
       run: python pintu_scraper/pintu_scraper.py --save --max 15
+  tokocrypto:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    - name: Tokocrypto Scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python tokocrypto_scraper/tokocrypto_scraper.py --save --max 10
+  indodax:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    - name: Indodax Blog Scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python indodax_scraper/indodax_scraper.py --save --max 15
+  osl:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: OSL Announcement Scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python osl_scraper/osl_scraper.py --save --max 10
+  mobee:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    - name: Mobee News Scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python mobee_scraper/mobee_scraper.py --save --max 10
+  bitget:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Bitget News Scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python bitget_scraper/bitget_scraper.py --save --max 10
+  okx:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: OKX Announcement Scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python okx_scraper/okx_scraper.py --save --max 10
