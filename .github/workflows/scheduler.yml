@@ -17,8 +17,6 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -37,8 +35,6 @@ jobs:
   news:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -60,8 +56,6 @@ jobs:
   fifa:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -83,8 +77,6 @@ jobs:
   fifa_blog:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -106,8 +98,6 @@ jobs:
   ai_digest:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -127,8 +117,6 @@ jobs:
   bot_posts:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -148,8 +136,6 @@ jobs:
   airdrop:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -168,8 +154,6 @@ jobs:
   indo_news:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -188,8 +172,6 @@ jobs:
   esports:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -210,8 +192,6 @@ jobs:
   worldcup:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -233,8 +213,6 @@ jobs:
   us_stock:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
