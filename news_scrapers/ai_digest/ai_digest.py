@@ -79,7 +79,7 @@ def lookup_admin() -> dict:
 
 
 def get_hot_tokens_cat_id() -> str:
-    name = os.environ.get("HOT_TOKENS_CATEGORY_NAME", "Hot Tokens")
+    name = os.environ.get("HOT_TOKENS_CATEGORY_NAME") or "Hot Tokens"
     row = select_one("categories", {"name": name}, columns="id")
     return row["id"]
 

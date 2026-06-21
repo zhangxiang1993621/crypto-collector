@@ -57,7 +57,7 @@ def lookup_author_id() -> str:
 
 
 def lookup_category_id() -> str:
-    name = os.environ.get("FIFA_CATEGORY_NAME", "Sports Talk")
+    name = os.environ.get("FIFA_CATEGORY_NAME") or "Sports Talk"
     row = select_one("categories", {"name": name}, columns="id,name")
     if not row:
         logger.error(f"未找到分类: {name}")

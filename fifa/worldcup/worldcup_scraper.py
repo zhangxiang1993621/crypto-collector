@@ -151,7 +151,7 @@ def get_team_info(team_name: str) -> tuple[str, str]:
 
 def get_cat_id() -> str:
     """获取 Sports Talk 分类 ID"""
-    name = os.environ.get("FIFA_CATEGORY_NAME", "Sports Talk")
+    name = os.environ.get("FIFA_CATEGORY_NAME") or "Sports Talk"
     row = select_one("categories", {"name": name}, columns="id")
     if not row:
         logger.error(f"未找到分类: {name}")

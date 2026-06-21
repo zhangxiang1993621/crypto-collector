@@ -214,7 +214,7 @@ def lookup_author_id() -> str:
 
 def lookup_category_id() -> str:
     """根据配置的分类名查询 category_id"""
-    name = os.environ.get("POSTS_CATEGORY_NAME", "news")
+    name = os.environ.get("POSTS_CATEGORY_NAME") or "news"
     row = select_one("categories", {"name": name}, columns="id,name")
     if row:
         logger.info(f"分类: {name} (id={row['id']})")

@@ -27,7 +27,7 @@ ANNOUNCE_URL = f"{BASE_URL}/en-id/announcement"
 
 
 def get_cat_id() -> str:
-    name = os.environ.get("OSL_CATEGORY_NAME", "news")
+    name = os.environ.get("OSL_CATEGORY_NAME") or "news"
     row = select_one("categories", {"name": name}, columns="id")
     if not row:
         logger.error(f"未找到分类: {name}")
