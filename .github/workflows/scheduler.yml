@@ -1,0 +1,279 @@
+name: Crypto Collector
+
+on:
+  schedule:
+  - cron: '*/30 * * * *'
+  - cron: 0 */2 * * *
+  - cron: 0 8 * * *
+  - cron: 0 10 * * *
+  - cron: 0 */4 * * *
+  - cron: 30 */2 * * *
+  - cron: 0 */6 * * *
+  - cron: 0 7,19 * * *
+  - cron: 0 8,20 * * *
+  - cron: '*/30 * * * *'
+  - cron: 30 21 * * 1-5
+  workflow_dispatch: null
+
+jobs:
+  # ══════════════ httpx-only jobs ══════════════
+  price_collector:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with: {python-version: '3.11'}
+    - name: Install
+      run: pip install -r requirements.txt
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        COINCAP_API_KEY: ${{ secrets.COINCAP_API_KEY }}
+      run: python crypto/price_collector.py || echo "[FAIL]"
+
+  airdrop:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
+      run: python crypto/airdrop_scraper.py --save --max 20 || echo "[FAIL]"
+
+  ai_digest:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
+      run: python news_scrapers/ai_digest/ai_digest.py --save --max 10 || echo "[FAIL]"
+
+  bot_posts:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
+      run: python news_scrapers/ai_digest/bot_posts.py --save --bots 5 || echo "[FAIL]"
+
+  indo_news:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
+      run: python news_scrapers/indo_news/indo_news_scraper.py --save --max 15 || echo "[FAIL]"
+
+  tokocrypto:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python news_scrapers/tokocrypto/tokocrypto_scraper.py --save --max 10 || echo "[FAIL]"
+
+  indodax:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python news_scrapers/indodax/indodax_scraper.py --save --max 15 || echo "[FAIL]"
+
+  pintu:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        PINTU_CATEGORY_NAME: ${{ vars.PINTU_CATEGORY_NAME }}
+      run: python news_scrapers/pintu/pintu_scraper.py --save --max 15 || echo "[FAIL]"
+
+  mobee:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python news_scrapers/mobee/mobee_scraper.py --save --max 10 || echo "[FAIL]"
+
+  # ══════════════ Playwright (Chromium) jobs ══════════════
+  news:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
+      run: python news_scrapers/binance/news_scraper.py --scroll 5 --max 50 --save || echo "[FAIL]"
+
+  fifa_schedule:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python fifa/schedule/fifa_scraper.py --save || echo "[FAIL]"
+
+  fifa_blog:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python fifa/blog/fifa_blog_scraper.py --save --max 30 || echo "[FAIL]"
+
+  esports:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        ESPers_CATEGORY_NAME: ${{ vars.ESPers_CATEGORY_NAME }}
+      run: python news_scrapers/esports/esports_scraper.py --save --max 10 || echo "[FAIL]"
+
+  worldcup:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+      run: python fifa/worldcup/worldcup_scraper.py --save --today --max 20 || echo "[FAIL]"
+
+  osl:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python news_scrapers/osl/osl_scraper.py --save --max 10 || echo "[FAIL]"
+
+  bitget:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python news_scrapers/bitget/bitget_scraper.py --save --max 10 || echo "[FAIL]"
+
+  okx:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python news_scrapers/okx/okx_scraper.py --save --max 10 || echo "[FAIL]"
+
+  # ══════════════ CloakBrowser (美股) ══════════════
+  us_stock:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install playwright
+        playwright install-deps chromium
+    - run: |
+        pip install -r requirements.txt
+        cloakbrowser install || echo "CloakBrowser verify skipped"
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: python us_stock_scraper/us_stock_scraper.py --upload --backfill 4
