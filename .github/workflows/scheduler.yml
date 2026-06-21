@@ -40,11 +40,11 @@ jobs:
       run: |
         set +e
         echo "::group::price_collector"
-        python price_collector/main.py || echo "[FAIL] price_collector"
+        python crypto/price_collector.py || echo "[FAIL] price_collector"
         echo "::endgroup::"
 
         echo "::group::airdrop_scraper"
-        python airdrop_scraper/airdrop_scraper.py --save --max 20 || echo "[FAIL] airdrop_scraper"
+        python crypto/airdrop_scraper.py --save --max 20 || echo "[FAIL] airdrop_scraper"
         echo "::endgroup::"
 
         echo "::group::ai_digest"
