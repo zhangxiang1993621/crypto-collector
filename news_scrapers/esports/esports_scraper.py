@@ -18,7 +18,7 @@ import logging
 import argparse
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import httpx
 from dotenv import load_dotenv

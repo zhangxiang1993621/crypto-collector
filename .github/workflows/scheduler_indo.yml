@@ -27,10 +27,10 @@ jobs:
       run: |
         set +e
         echo "::group::tokocrypto"
-        python tokocrypto_scraper/tokocrypto_scraper.py --save --max 10 || echo "[FAIL] tokocrypto"
+        python news_scrapers/tokocrypto/tokocrypto_scraper.py --save --max 10 || echo "[FAIL] tokocrypto"
         echo "::endgroup::"
         echo "::group::indodax"
-        python indodax_scraper/indodax_scraper.py --save --max 15 || echo "[FAIL] indodax"
+        python news_scrapers/indodax/indodax_scraper.py --save --max 15 || echo "[FAIL] indodax"
         echo "::endgroup::"
         echo "=== indo_twice_daily done ==="
 
@@ -55,10 +55,10 @@ jobs:
       run: |
         set +e
         echo "::group::pintu"
-        python pintu_scraper/pintu_scraper.py --save --max 15 || echo "[FAIL] pintu"
+        python news_scrapers/pintu/pintu_scraper.py --save --max 15 || echo "[FAIL] pintu"
         echo "::endgroup::"
         echo "::group::mobee"
-        python mobee_scraper/mobee_scraper.py --save --max 10 || echo "[FAIL] mobee"
+        python news_scrapers/mobee/mobee_scraper.py --save --max 10 || echo "[FAIL] mobee"
         echo "::endgroup::"
         echo "=== indo_daily_httpx done ==="
 
@@ -84,12 +84,12 @@ jobs:
       run: |
         set +e
         echo "::group::osl"
-        python osl_scraper/osl_scraper.py --save --max 10 || echo "[FAIL] osl"
+        python news_scrapers/osl/osl_scraper.py --save --max 10 || echo "[FAIL] osl"
         echo "::endgroup::"
         echo "::group::bitget"
-        python bitget_scraper/bitget_scraper.py --save --max 10 || echo "[FAIL] bitget"
+        python news_scrapers/bitget/bitget_scraper.py --save --max 10 || echo "[FAIL] bitget"
         echo "::endgroup::"
         echo "::group::okx"
-        python okx_scraper/okx_scraper.py --save --max 10 || echo "[FAIL] okx"
+        python news_scrapers/okx/okx_scraper.py --save --max 10 || echo "[FAIL] okx"
         echo "::endgroup::"
         echo "=== indo_daily_browser done ==="

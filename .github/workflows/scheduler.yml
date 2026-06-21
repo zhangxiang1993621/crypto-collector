@@ -56,7 +56,7 @@ jobs:
         echo "::endgroup::"
 
         echo "::group::indo_news"
-        python indo_news_scraper/indo_news_scraper.py --save --max 15 || echo "[FAIL] indo_news"
+        python news_scrapers/indo_news/indo_news_scraper.py --save --max 15 || echo "[FAIL] indo_news"
         echo "::endgroup::"
 
         echo ""
@@ -88,23 +88,23 @@ jobs:
       run: |
         set +e
         echo "::group::news_scraper"
-        python news_scraper/news_scraper.py --scroll 5 --max 50 --save || echo "[FAIL] news_scraper"
+        python news_scrapers/binance/news_scraper.py --scroll 5 --max 50 --save || echo "[FAIL] news_scraper"
         echo "::endgroup::"
 
         echo "::group::fifa_scraper"
-        python fifa_scraper/fifa_scraper.py --save || echo "[FAIL] fifa_scraper"
+        python fifa/schedule/fifa_scraper.py --save || echo "[FAIL] fifa_scraper"
         echo "::endgroup::"
 
         echo "::group::fifa_blog"
-        python fifa_blog_scraper/fifa_blog_scraper.py --save --max 30 || echo "[FAIL] fifa_blog"
+        python fifa/blog/fifa_blog_scraper.py --save --max 30 || echo "[FAIL] fifa_blog"
         echo "::endgroup::"
 
         echo "::group::esports"
-        python esports_scraper/esports_scraper.py --save --max 10 || echo "[FAIL] esports"
+        python news_scrapers/esports/esports_scraper.py --save --max 10 || echo "[FAIL] esports"
         echo "::endgroup::"
 
         echo "::group::worldcup"
-        python worldcup_scraper/worldcup_scraper.py --save --today --max 20 || echo "[FAIL] worldcup"
+        python fifa/worldcup/worldcup_scraper.py --save --today --max 20 || echo "[FAIL] worldcup"
         echo "::endgroup::"
 
         echo ""

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 # 子进程执行时需要项目根目录在 sys.path 中
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import httpx
 from dotenv import load_dotenv
