@@ -16,7 +16,6 @@ import time
 import logging
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
 from datetime import datetime, timezone, timedelta
 
 # 子进程执行时需要项目根目录在 sys.path 中
@@ -24,17 +23,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
 from dotenv import load_dotenv
-from supabase_client import get_client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import batch_upsert, execute_sql
 from cloakbrowser import launch
-
-if TYPE_CHECKING:
-    from supabase import Client
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-BATCH_SIZE = 500  # Supabase upsert 批处理大小
 
 logging.basicConfig(
     level=logging.INFO,
@@ -180,17 +176,9 @@ def collect_symbols(browser_page, items: list[dict]) -> list[dict]:
     return results
 
 
-# ────────────────────── Supabase 入库 ──────────────────────
+# ────────────────────── 数据库入库（直连 PostgreSQL）──────────────────────
 
-def get_supabase_client() -> "Client | None":
-    """获取 Supabase 客户端（绕过代理），环境变量缺失则返回 None"""
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        logger.warning("缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 环境变量，跳过入库")
-        return None
-    return get_client()
-
-
-def upload_bars(client: "Client", data_list: list[dict]) -> int:
+def upload_bars(data_list: list[dict]) -> int:
     """批量 upsert 分钟 K 线到 us_stock_bars 表"""
     all_rows = []
     for d in data_list:
@@ -220,22 +208,16 @@ def upload_bars(client: "Client", data_list: list[dict]) -> int:
         logger.info("  无 K 线数据需要入库")
         return 0
 
-    inserted = 0
-    for i in range(0, total, BATCH_SIZE):
-        batch = all_rows[i:i + BATCH_SIZE]
-        try:
-            client.table("us_stock_bars").upsert(
-                batch, on_conflict="symbol,bar_time"
-            ).execute()
-            inserted += len(batch)
-        except Exception as e:
-            logger.error(f"  bars 入库批次失败 [{i}:{i + len(batch)}]: {e}")
-
-    logger.info(f"  us_stock_bars: upsert {inserted}/{total} 条分钟K线")
-    return inserted
+    try:
+        batch_upsert("us_stock_bars", all_rows, "symbol,bar_time")
+        logger.info(f"  us_stock_bars: upsert {total} 条分钟K线")
+        return total
+    except Exception as e:
+        logger.error(f"  bars 入库失败: {e}")
+        return 0
 
 
-def upload_trends(client: "Client", data_list: list[dict]) -> int:
+def upload_trends(data_list: list[dict]) -> int:
     """upsert 每日趋势汇总到 us_stock_trends 表"""
     rows = []
     for d in data_list:
@@ -265,9 +247,7 @@ def upload_trends(client: "Client", data_list: list[dict]) -> int:
         return 0
 
     try:
-        client.table("us_stock_trends").upsert(
-            rows, on_conflict="symbol"
-        ).execute()
+        batch_upsert("us_stock_trends", rows, "symbol")
         logger.info(f"  us_stock_trends: upsert {total} 条趋势汇总")
         return total
     except Exception as e:
@@ -275,7 +255,7 @@ def upload_trends(client: "Client", data_list: list[dict]) -> int:
         return 0
 
 
-def seed_symbols(client: "Client") -> int:
+def seed_symbols() -> int:
     """种子数据：将 INDICES + STOCKS 元信息写入 stock_symbols 表（幂等 upsert）"""
     rows = []
     for item in INDICES:
@@ -298,9 +278,7 @@ def seed_symbols(client: "Client") -> int:
         })
 
     try:
-        client.table("stock_symbols").upsert(
-            rows, on_conflict="symbol"
-        ).execute()
+        batch_upsert("stock_symbols", rows, "symbol")
         logger.info(f"  stock_symbols: upsert {len(rows)} 条标的元信息")
         return len(rows)
     except Exception as e:
@@ -310,14 +288,14 @@ def seed_symbols(client: "Client") -> int:
 
 def upload_to_supabase(data_list: list[dict]) -> dict:
     """将所有数据上传到 Supabase，返回上传统计"""
-    client = get_supabase_client()
-    if client is None:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        logger.warning("缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 环境变量，跳过入库")
         return {"symbols": 0, "bars": 0, "trends": 0}
 
     logger.info("上传数据到 Supabase...")
-    symbols_count = seed_symbols(client)
-    bars_count = upload_bars(client, data_list)
-    trends_count = upload_trends(client, data_list)
+    symbols_count = seed_symbols()
+    bars_count = upload_bars(data_list)
+    trends_count = upload_trends(data_list)
     return {"symbols": symbols_count, "bars": bars_count, "trends": trends_count}
 
 
@@ -343,76 +321,36 @@ def _get_trading_days(days_back: int) -> list[str]:
     return trading_days
 
 
-def detect_gaps(client: "Client", lookback_days: int) -> dict[str, list[str]]:
-    """检测每个标的在最近 N 个交易日中的缺失日期
-
-    对 us_stock_bars 表按 symbol + 日期分组统计，找出 bar 数为 0 的交易日。
-
-    Args:
-        client: Supabase 客户端
-        lookback_days: 往回检查多少个交易日
-
-    Returns:
-        {"AAPL": ["2026-06-12", "2026-06-10"], "^GSPC": ["2026-06-11"]}
-    """
+def detect_gaps(lookback_days: int) -> dict[str, list[str]]:
+    """检测每个标的在最近 N 个交易日中的缺失日期"""
     trading_days = _get_trading_days(lookback_days)
     if not trading_days:
         return {}
 
-    earliest = trading_days[-1]  # 最早的日期
+    earliest = trading_days[-1]
     logger.info(f"检测 {lookback_days} 个交易日 ({earliest} ~ {trading_days[0]}) 的数据缺失情况...")
 
-    # 一次性查出所有 symbol 在这段时间内的 bar
     all_symbols = [s["symbol"] for s in INDICES] + [s["symbol"] for s in STOCKS]
     gaps: dict[str, list[str]] = {}
 
     for sym in all_symbols:
-        # 优先用 Supabase RPC 高效检测，不可用时降级客户端侧逐日查询
-        rpc_ok = False
-        try:
-            r = client.rpc(
-                "get_missing_trading_days",
-                {
-                    "p_symbol": sym,
-                    "p_start_date": earliest,
-                    "p_end_date": trading_days[0],
-                },
-            ).execute()
-
-            if r.data:
-                missing = [row["trade_date"] for row in r.data]
-                if missing:
-                    gaps[sym] = missing
-                    logger.info(f"  {sym}: 缺 {len(missing)} 天 → {missing}")
-                else:
-                    logger.debug(f"  {sym}: 完整")
-                rpc_ok = True
-        except Exception:
-            pass  # RPC 不可用，降级客户端侧
-
-        if not rpc_ok:
-            gaps[sym] = _detect_gaps_client_side(client, sym, trading_days)
+        gaps[sym] = _detect_gaps_for_symbol(sym, trading_days)
 
     return gaps
 
 
-def _detect_gaps_client_side(
-    client: "Client", symbol: str, trading_days: list[str]
-) -> list[str]:
-    """客户端侧补缺检测：逐日查询 us_stock_bars 是否有数据
-
-    当 Supabase RPC 不存在时使用的兜底方案。
-    """
+def _detect_gaps_for_symbol(symbol: str, trading_days: list[str]) -> list[str]:
+    """逐日查询 us_stock_bars 是否有数据（直连 PostgreSQL）"""
     missing: list[str] = []
     for day in trading_days:
+        sql = '''
+            SELECT COUNT(*) as cnt FROM us_stock_bars 
+            WHERE symbol = %s AND bar_time >= %s AND bar_time < %s
+        '''
         day_start = f"{day}T00:00:00+00:00"
         day_end = f"{day}T23:59:59+00:00"
-        r = client.table("us_stock_bars").select(
-            "id", count="exact"
-        ).eq("symbol", symbol).gte("bar_time", day_start).lte(
-            "bar_time", day_end
-        ).limit(1).execute()
-        if r.count == 0:
+        rows = execute_sql(sql, (symbol, day_start, day_end))
+        if not rows or rows[0].get("cnt", 0) == 0:
             missing.append(day)
     return missing
 
@@ -493,24 +431,11 @@ def _fetch_for_date(browser_page, symbol: str, target_date: str) -> dict:
 
 
 def fill_gaps(browser_page, lookback_days: int = 5) -> dict:
-    """补缺主流程：检测缺失 → 拉取历史数据 → 入库
-
-    Args:
-        browser_page: CloakBrowser 浏览器页面对象
-        lookback_days: 往回检查最近 N 个交易日
-
-    Returns:
-        {"filled_days": int, "filled_bars": int, "symbols_fixed": int, "missing": int}
-    """
+    """补缺主流程：检测缺失 → 拉取历史数据 → 入库"""
     logger.info(f"\n=== 数据补缺检查 (最近 {lookback_days} 个交易日) ===")
 
-    client = get_supabase_client()
-    if client is None:
-        logger.warning("无法连接 Supabase，跳过补缺")
-        return {"filled_days": 0, "filled_bars": 0, "symbols_fixed": 0, "missing": 0}
-
     # Step 1: 检测缺失
-    gaps = detect_gaps(client, lookback_days)
+    gaps = detect_gaps(lookback_days)
 
     total_missing = sum(len(days) for days in gaps.values())
     if total_missing == 0:
@@ -558,17 +483,13 @@ def fill_gaps(browser_page, lookback_days: int = 5) -> dict:
                     "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
                 })
 
-            # 分批 upsert
-            upserted = 0
-            for i in range(0, len(rows), BATCH_SIZE):
-                batch = rows[i:i + BATCH_SIZE]
-                try:
-                    client.table("us_stock_bars").upsert(
-                        batch, on_conflict="symbol,bar_time"
-                    ).execute()
-                    upserted += len(batch)
-                except Exception as e:
-                    logger.error(f"    补缺入库失败 [{sym} {day} batch {i}]: {e}")
+            # 直接 upsert 全部行
+            try:
+                upserted = batch_upsert("us_stock_bars", rows, "symbol,bar_time")
+            except Exception as e:
+                logger.error(f"    补缺入库失败 [{sym} {day}]: {e}")
+                skipped += 1
+                continue
 
             filled_bars += upserted
             filled_days += 1

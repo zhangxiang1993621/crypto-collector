@@ -18,7 +18,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
-from supabase import create_client
+from supabase import create_client  # 仅用于 Auth Admin API 创建用户
+# 数据库操作使用直连 PostgreSQL
+from db_direct import select_all, update_one
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -91,8 +93,8 @@ def main():
     client = create_client(url, key)
 
     # 查询已有用户名
-    existing_res = client.table("profiles").select("username").execute()
-    existing_usernames = {r["username"] for r in existing_res.data}
+    rows = select_all("profiles", columns="username")
+    existing_usernames = {r["username"] for r in rows}
     logger.info(f"现有 {len(existing_usernames)} 个用户")
 
     created = 0
@@ -128,7 +130,7 @@ def main():
             logger.info(f"[Auth] 创建用户 {username}, id={user_id[:8]}...")
 
             # 更新 profiles 记录（auth 触发已插入基础记录，现在补全字段）
-            client.table("profiles").update({
+            update_one("profiles", {
                 "username": username,
                 "avatar": avatar_url,
                 "bio": bio,
@@ -140,7 +142,7 @@ def main():
                 "received_likes_count": 0,
                 "followers_count": 0,
                 "following_count": 0,
-            }).eq("id", user_id).execute()
+            }, {"id": user_id})
 
             created += 1
             logger.info(f"[创建] {username} (头像: {style})")

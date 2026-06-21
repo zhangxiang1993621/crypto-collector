@@ -25,7 +25,8 @@ from datetime import datetime, timezone
 
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, update_one, execute_sql
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -41,40 +42,32 @@ BASE_URL = "https://fifaworldcup26.hospitality.fifa.com"
 BLOG_LIST_URL = f"{BASE_URL}/blog"
 
 
-# ────────────────────── Supabase 工具 ──────────────────────
+# ────────────────────── 数据库工具（直连 PostgreSQL） ──────────────────────
 
-def get_supabase_client() -> Client:
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        logger.error("缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 环境变量")
-        sys.exit(1)
-    return create_client(url, key)
-
-
-def lookup_author_id(client: Client) -> str:
+def lookup_author_id() -> str:
     username = os.environ.get("POSTS_AUTHOR_USERNAME", "indoAdmin")
-    result = client.table("profiles").select("id,username").eq("username", username).execute()
-    if not result.data:
+    row = select_one("profiles", {"username": username}, columns="id,username")
+    if not row:
         logger.error(f"未找到作者: {username}")
         sys.exit(1)
-    logger.info(f"作者: {username} (id={result.data[0]['id']})")
-    return result.data[0]["id"]
+    logger.info(f"作者: {username} (id={row['id']})")
+    return row["id"]
 
 
-def lookup_category_id(client: Client) -> str:
+def lookup_category_id() -> str:
     name = os.environ.get("FIFA_CATEGORY_NAME", "Sports Talk")
-    result = client.table("categories").select("id,name").eq("name", name).execute()
-    if not result.data:
+    row = select_one("categories", {"name": name}, columns="id,name")
+    if not row:
         logger.error(f"未找到分类: {name}")
         sys.exit(1)
-    logger.info(f"分类: {name} (id={result.data[0]['id']})")
-    return result.data[0]["id"]
+    logger.info(f"分类: {name} (id={row['id']})")
+    return row["id"]
 
 
-def load_existing_titles(client: Client) -> set[str]:
-    result = client.table("posts").select("title").execute()
-    titles = {r["title"] for r in result.data}
+def load_existing_titles() -> set[str]:
+    """返回数据库中所有帖子标题集合"""
+    rows = select_all("posts", {}, columns="title")
+    titles = {r["title"] for r in rows}
     logger.info(f"数据库中已有 {len(titles)} 条帖子")
     return titles
 
@@ -98,9 +91,9 @@ def download_image_as_base64(img_url: str) -> dict | None:
         return None
 
 
-# ────────────────────── 标签同步 ──────────────────────
+# ────────────────────── 标签（直连 PostgreSQL） ──────────────────────
 
-def sync_tags_for_post(client: Client, post_id: str, tag_names: list[str]) -> None:
+def sync_tags_for_post(post_id: str, tag_names: list[str]) -> None:
     """为文章同步标签：查找/创建 tag，写入 post_tags 关联"""
     if not tag_names:
         return
@@ -108,32 +101,34 @@ def sync_tags_for_post(client: Client, post_id: str, tag_names: list[str]) -> No
     unique_names = list(set(tag_names))
 
     existing_map = {}
-    try:
-        existing = client.table("tags").select("id,name").in_("name", unique_names).execute()
-        existing_map = {r["name"]: r["id"] for r in existing.data}
-    except Exception:
-        pass
+    if unique_names:
+        placeholders = ", ".join(["%s"] * len(unique_names))
+        sql = f'SELECT id, name FROM tags WHERE name IN ({placeholders})'
+        rows = execute_sql(sql, tuple(unique_names))
+        if rows:
+            existing_map = {r["name"]: r["id"] for r in rows}
 
     new_names = [n for n in unique_names if n not in existing_map]
     if new_names:
-        try:
-            result = client.table("tags").insert([{"name": n, "posts_count": 0} for n in new_names]).execute()
-            for r in result.data:
-                existing_map[r["name"]] = r["id"]
-        except Exception:
-            pass
+        for name in new_names:
+            try:
+                result = insert_one("tags", {"name": name, "posts_count": 0}, returning="id")
+                if result:
+                    existing_map[name] = result["id"]
+            except Exception:
+                pass
 
     for name in unique_names:
         tag_id = existing_map.get(name)
         if not tag_id:
             continue
         try:
-            link = client.table("post_tags").select("post_id").eq("post_id", post_id).eq("tag_id", tag_id).execute()
-            if not link.data:
-                client.table("post_tags").insert({"post_id": post_id, "tag_id": tag_id}).execute()
-                tag = client.table("tags").select("posts_count").eq("id", tag_id).single().execute()
-                new_count = (tag.data.get("posts_count", 0) or 0) + 1
-                client.table("tags").update({"posts_count": new_count}).eq("id", tag_id).execute()
+            link = select_one("post_tags", {"post_id": post_id, "tag_id": tag_id}, columns="post_id")
+            if not link:
+                insert_one("post_tags", {"post_id": post_id, "tag_id": tag_id})
+                tag = select_one("tags", {"id": tag_id}, columns="posts_count")
+                new_count = (tag.get("posts_count", 0) or 0) + 1
+                update_one("tags", {"posts_count": new_count}, {"id": tag_id})
         except Exception:
             pass
 
@@ -357,9 +352,9 @@ def build_html_content(article: dict, hero_b64: dict | None, content_images: lis
     return "\n".join(parts)
 
 
-# ────────────────────── 入库 ──────────────────────
+# ────────────────────── 入库（直连 PostgreSQL） ──────────────────────
 
-def insert_post(client: Client, title: str, content: str, author_id: str,
+def insert_post(title: str, content: str, author_id: str,
                  category_id: str, tag_names: list[str], existing_titles: set) -> bool:
     """插入帖子，标题已存在则跳过"""
     if title in existing_titles:
@@ -367,7 +362,7 @@ def insert_post(client: Client, title: str, content: str, author_id: str,
         return False
 
     now = datetime.now(timezone.utc).isoformat()
-    resp = client.table("posts").insert({
+    result = insert_one("posts", {
         "title": title,
         "content": content,
         "author_id": author_id,
@@ -375,11 +370,11 @@ def insert_post(client: Client, title: str, content: str, author_id: str,
         "status": "pending_review",
         "created_at": now,
         "updated_at": now,
-    }).execute()
-    post_id = resp.data[0]["id"]
+    }, returning="id")
+    post_id = result["id"]
 
     # 同步标签
-    sync_tags_for_post(client, post_id, tag_names)
+    sync_tags_for_post(post_id, tag_names)
     existing_titles.add(title)
     return True
 
@@ -396,15 +391,13 @@ def run(save_to_db: bool = False, max_articles: int = 50, output_file: str | Non
         return []
 
     # 2. 准备入库环境
-    client = None
     author_id = None
     category_id = None
     existing_titles = set()
     if save_to_db:
-        client = get_supabase_client()
-        author_id = lookup_author_id(client)
-        category_id = lookup_category_id(client)
-        existing_titles = load_existing_titles(client)
+        author_id = lookup_author_id()
+        category_id = lookup_category_id()
+        existing_titles = load_existing_titles()
 
     # 3. 逐篇抓取详情
     results = []
@@ -447,8 +440,8 @@ def run(save_to_db: bool = False, max_articles: int = 50, output_file: str | Non
         results.append(result)
 
         # 入库
-        if save_to_db and client:
-            if insert_post(client, detail["title"], html, author_id, category_id, all_tags, existing_titles):
+        if save_to_db:
+            if insert_post(detail["title"], html, author_id, category_id, all_tags, existing_titles):
                 saved_count += 1
                 logger.info(f"  [入库] {detail['title'][:50]}")
             else:

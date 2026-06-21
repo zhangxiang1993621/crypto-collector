@@ -32,7 +32,7 @@ jobs:
       env:
         COINCAP_API_KEY: ${{ secrets.COINCAP_API_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       run: python price_collector/main.py
   news:
     runs-on: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
     - name: Scrape and save posts
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
       run: python news_scraper/news_scraper.py --scroll 5 --max 50 --save
@@ -76,7 +76,7 @@ jobs:
     - name: Scrape FIFA schedule
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
       run: python fifa_scraper/fifa_scraper.py --save
@@ -162,7 +162,7 @@ jobs:
     - name: Airdrop Scraper
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
       run: python airdrop_scraper/airdrop_scraper.py --save --max 20
   indo_news:
@@ -182,7 +182,7 @@ jobs:
     - name: Indo News Scraper
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
       run: python indo_news_scraper/indo_news_scraper.py --save --max 15
   esports:
@@ -204,7 +204,7 @@ jobs:
     - name: Esports Scraper
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         ESPers_CATEGORY_NAME: ${{ vars.ESPers_CATEGORY_NAME }}
       run: python esports_scraper/esports_scraper.py --save --max 10
   worldcup:

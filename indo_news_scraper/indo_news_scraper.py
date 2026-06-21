@@ -18,7 +18,6 @@ import random
 import logging
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
 from datetime import datetime, timezone
 from xml.etree import ElementTree
 
@@ -26,10 +25,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
-from supabase_client import get_client
-
-if TYPE_CHECKING:
-    from supabase import Client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -124,21 +121,21 @@ INDO_KEYWORDS = [
 # ────────────────────── 工具 ──────────────────────
 
 
-def get_cat_id(client: "Client") -> str:
+def get_cat_id() -> str:
     name = os.environ.get("INDO_CATEGORY_NAME", "Indo Street")
-    r = client.table("categories").select("id").eq("name", name).execute()
-    if not r.data:
+    row = select_one("categories", {"name": name}, columns="id")
+    if not row:
         logger.error(f"未找到分类: {name}")
         sys.exit(1)
-    return r.data[0]["id"]
+    return row["id"]
 
 
-def get_random_bot(client: "Client") -> dict:
-    r = client.table("profiles").select("id,username").eq("is_bot", True).execute()
-    if not r.data:
+def get_random_bot() -> dict:
+    rows = select_all("profiles", {"is_bot": True}, columns="id,username")
+    if not rows:
         logger.error("无可用机器人")
         sys.exit(1)
-    return random.choice(r.data)
+    return random.choice(rows)
 
 
 def strip_html(text: str) -> str:
@@ -360,40 +357,36 @@ def build_post_html(item: dict) -> str:
     return "\n".join(parts)
 
 
-# ────────────────────── 标签 ──────────────────────
+# ────────────────────── 标签（直连 PostgreSQL） ──────────────────────
 
-def sync_tags(client: "Client", post_id: str, tags: list[str]) -> None:
+def sync_tags(post_id: str, tags: list[str]) -> None:
     if not tags:
         return
     unique = list(set(tags))
     em = {}
-    try:
-        r = client.table("tags").select("id,name").in_("name", unique).execute()
-        em = {d["name"]: d["id"] for d in r.data}
-    except Exception:
-        pass
+    if unique:
+        placeholders = ", ".join(["%s"] * len(unique))
+        sql = f'SELECT id, name FROM tags WHERE name IN ({placeholders})'
+        rows = execute_sql(sql, tuple(unique))
+        if rows:
+            em = {d["name"]: d["id"] for d in rows}
     new = [n for n in unique if n not in em]
     if new:
-        try:
-            r = client.table("tags").insert(
-                [{"name": n, "posts_count": 0} for n in new]
-            ).execute()
-            for d in r.data:
-                em[d["name"]] = d["id"]
-        except Exception:
-            pass
+        for name in new:
+            try:
+                result = insert_one("tags", {"name": name, "posts_count": 0}, returning="id")
+                if result:
+                    em[name] = result["id"]
+            except Exception:
+                pass
     for name in unique:
         tid = em.get(name)
         if not tid:
             continue
         try:
-            lk = client.table("post_tags").select("post_id").eq(
-                "post_id", post_id
-            ).eq("tag_id", tid).execute()
-            if not lk.data:
-                client.table("post_tags").insert({
-                    "post_id": post_id, "tag_id": tid
-                }).execute()
+            link = select_one("post_tags", {"post_id": post_id, "tag_id": tid}, columns="post_id")
+            if not link:
+                insert_one("post_tags", {"post_id": post_id, "tag_id": tid})
         except Exception:
             pass
 
@@ -452,13 +445,12 @@ def run(save: bool = False, max_items: int = 20):
             print(f"  {art['url']}")
 
     if save:
-        client = get_client()
-        cat_id = get_cat_id(client)
+        cat_id = get_cat_id()
         now = datetime.now(timezone.utc).isoformat()
         saved = 0
 
         for art in combined:
-            bot = get_random_bot(client)
+            bot = get_random_bot()
 
             # X 趋势用特殊模板，普通新闻用原有模板
             if art.get("is_x_trend"):
@@ -469,7 +461,7 @@ def run(save: bool = False, max_items: int = 20):
                 tags = ["Indonesia", "IndoNews"]
 
             try:
-                resp = client.table("posts").insert({
+                result = insert_one("posts", {
                     "title": art["title"][:200],
                     "content": content,
                     "author_id": bot["id"],
@@ -477,8 +469,8 @@ def run(save: bool = False, max_items: int = 20):
                     "status": "pending_review",
                     "created_at": now,
                     "updated_at": now,
-                }).execute()
-                sync_tags(client, resp.data[0]["id"], tags)
+                }, returning="id")
+                sync_tags(result["id"], tags)
                 saved += 1
                 logger.info(f"  [入库] [{bot['username']}] {art['title'][:50]}...")
             except Exception as e:

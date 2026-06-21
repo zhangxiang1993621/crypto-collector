@@ -5,7 +5,9 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import batch_upsert
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -21,15 +23,15 @@ BATCH_SIZE = 200
 
 COINCAP_API_KEY = os.environ.get("COINCAP_API_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_DB_PASSWORD = os.environ.get("SUPABASE_DB_PASSWORD")
 
 _missing = []
 if not COINCAP_API_KEY:
     _missing.append("COINCAP_API_KEY")
 if not SUPABASE_URL:
     _missing.append("SUPABASE_URL")
-if not SUPABASE_KEY:
-    _missing.append("SUPABASE_SERVICE_ROLE_KEY")
+if not SUPABASE_DB_PASSWORD:
+    _missing.append("SUPABASE_DB_PASSWORD")
 if _missing:
     logger.error(f"缺少环境变量: {', '.join(_missing)}，跳过采集")
     sys.exit(0)
@@ -72,14 +74,13 @@ def _parse_numeric(value: str | None) -> float | None:
         return None
 
 
-def batch_upsert(supabase: Client, table_name: str, rows: list[dict]) -> None:
+def batch_upsert_tokens(rows: list[dict]) -> None:
+    """批量 upsert tokens 表"""
     total = len(rows)
     for i in range(0, total, BATCH_SIZE):
         batch = rows[i : i + BATCH_SIZE]
         try:
-            supabase.table(table_name).upsert(
-                batch, on_conflict="coincap_id"
-            ).execute()
+            batch_upsert("tokens", batch, "coincap_id")
             logger.info(
                 f"批次 {i // BATCH_SIZE + 1}/{(total + BATCH_SIZE - 1) // BATCH_SIZE}: "
                 f"处理 {len(batch)} 条, 进度 {min(i + BATCH_SIZE, total)}/{total}"
@@ -91,13 +92,11 @@ def batch_upsert(supabase: Client, table_name: str, rows: list[dict]) -> None:
 def main():
     logger.info("=== 加密货币价格采集任务启动 ===")
 
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
     assets = fetch_all_assets()
 
     rows = [transform_asset(asset) for asset in assets]
 
-    batch_upsert(supabase, "tokens", rows)
+    batch_upsert_tokens(rows)
 
     logger.info(f"=== 采集完成, 共更新 {len(rows)} 个币种 ===")
 

@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, upsert_one, update_one, execute_sql
 from playwright.sync_api import sync_playwright
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -33,54 +34,40 @@ FIFA_API = "https://fifaworldcup26.hospitality.fifa.com/next-api/matches-all?pro
 FIFA_PAGE = "https://fifaworldcup26.hospitality.fifa.com/us/en/choose-matches?scheduleView=true"
 
 
-# ────────────────────── Supabase 工具 ──────────────────────
+# ────────────────────── 数据库工具（直连 PostgreSQL） ──────────────────────
 
-def get_supabase_client() -> Client:
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        logger.error("缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 环境变量")
-        sys.exit(1)
-    return create_client(url, key)
-
-
-def lookup_author_id(client: Client) -> str:
+def lookup_author_id() -> str:
     username = os.environ.get("POSTS_AUTHOR_USERNAME", "indoAdmin")
-    result = client.table("profiles").select("id,username").eq("username", username).execute()
-    if not result.data:
+    row = select_one("profiles", {"username": username}, columns="id,username")
+    if not row:
         logger.error(f"未找到作者: {username}")
         sys.exit(1)
-    row = result.data[0]
     logger.info(f"作者: {row['username']} (id={row['id']})")
     return row["id"]
 
 
-def lookup_category_id(client: Client) -> str:
+def lookup_category_id() -> str:
     name = os.environ.get("FIFA_CATEGORY_NAME", "Sports Talk")
-    result = client.table("categories").select("id,name").eq("name", name).execute()
-    if not result.data:
+    row = select_one("categories", {"name": name}, columns="id,name")
+    if not row:
         logger.error(f"未找到分类: {name}")
         sys.exit(1)
-    row = result.data[0]
     logger.info(f"分类: {row['name']} (id={row['id']})")
     return row["id"]
 
 
-def upsert_post(client: Client, title: str, content: str, author_id: str,
+def upsert_post(title: str, content: str, author_id: str,
                 category_id: str, tag_name: str) -> str:
     """检查标题是否存在 → 存在则更新，否则新增 → 同步标签"""
-    result = client.table("posts").select("id").eq("title", title).execute()
+    row = select_one("posts", {"title": title}, columns="id")
     now = datetime.now(timezone.utc).isoformat()
 
-    if result.data:
-        post_id = result.data[0]["id"]
-        client.table("posts").update({
-            "content": content,
-            "updated_at": now,
-        }).eq("id", post_id).execute()
+    if row:
+        post_id = row["id"]
+        update_one("posts", {"content": content, "updated_at": now}, {"id": post_id})
         logger.info(f"[更新] 帖子已存在，更新内容: {title}")
     else:
-        resp = client.table("posts").insert({
+        result = insert_one("posts", {
             "title": title,
             "content": content,
             "author_id": author_id,
@@ -88,35 +75,35 @@ def upsert_post(client: Client, title: str, content: str, author_id: str,
             "status": "pending_review",
             "created_at": now,
             "updated_at": now,
-        }).execute()
-        post_id = resp.data[0]["id"]
+        }, returning="id")
+        post_id = result["id"]
         logger.info(f"[新增] 创建帖子: {title}")
 
     # 同步标签
-    sync_tag(client, post_id, tag_name)
+    sync_tag(post_id, tag_name)
     return post_id
 
 
-def sync_tag(client: Client, post_id: str, tag_name: str) -> None:
+def sync_tag(post_id: str, tag_name: str) -> None:
     """查找或创建标签，建立 post_tags 关联"""
     # 查 tag
-    result = client.table("tags").select("id,name").eq("name", tag_name).execute()
-    if result.data:
-        tag_id = result.data[0]["id"]
+    row = select_one("tags", {"name": tag_name}, columns="id,name")
+    if row:
+        tag_id = row["id"]
     else:
-        resp = client.table("tags").insert({"name": tag_name}).execute()
-        tag_id = resp.data[0]["id"]
+        result = insert_one("tags", {"name": tag_name}, returning="id")
+        tag_id = result["id"]
         logger.info(f"[Tag] 创建新标签: {tag_name}")
 
     # 查 post_tags 关联
-    rel = client.table("post_tags").select("post_id").eq("post_id", post_id).eq("tag_id", tag_id).execute()
-    if not rel.data:
-        client.table("post_tags").insert({"post_id": post_id, "tag_id": tag_id}).execute()
+    rel = select_one("post_tags", {"post_id": post_id, "tag_id": tag_id}, columns="post_id")
+    if not rel:
+        insert_one("post_tags", {"post_id": post_id, "tag_id": tag_id})
 
     # 更新 posts_count
-    count_resp = client.table("post_tags").select("*", count="exact").eq("tag_id", tag_id).execute()
-    count = count_resp.count if count_resp.count else 1
-    client.table("tags").update({"posts_count": count}).eq("id", tag_id).execute()
+    rows = select_all("post_tags", {"tag_id": tag_id}, columns="*")
+    count = len(rows) if rows else 1
+    update_one("tags", {"posts_count": count}, {"id": tag_id})
 
 
 # ────────────────────── 数据抓取 ──────────────────────
@@ -255,11 +242,10 @@ def run(save_to_db: bool = False) -> list[dict]:
         logger.info(f"推导修复 {fixed} 场缺失分组")
 
     if save_to_db:
-        client = get_supabase_client()
-        author_id = lookup_author_id(client)
-        category_id = lookup_category_id(client)
+        author_id = lookup_author_id()
+        category_id = lookup_category_id()
         html = build_html_schedule(result)
-        upsert_post(client, "美加墨世界杯小组赛赛程安排", html, author_id, category_id, "美加墨世界杯")
+        upsert_post("美加墨世界杯小组赛赛程安排", html, author_id, category_id, "美加墨世界杯")
 
     return result
 

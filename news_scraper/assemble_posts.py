@@ -17,14 +17,10 @@ import logging
 import argparse
 from pathlib import Path
 
-from typing import TYPE_CHECKING
-
 import httpx
 from dotenv import load_dotenv
-from supabase_client import get_client
-
-if TYPE_CHECKING:
-    from supabase import Client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_all, select_one, insert_one, insert_many, update_one, execute_sql, batch_upsert
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,35 +44,25 @@ def get_env(env_name: str) -> str:
     return value
 
 
-def lookup_author_id(client: "Client", username: str) -> str:
+def lookup_author_id(username: str) -> str:
     """根据用户名从 profiles 表查询 author_id"""
-    try:
-        result = client.table("profiles").select("id,username").eq("username", username).execute()
-        if result.data:
-            profile = result.data[0]
-            logger.info(f"找到作者: {profile['username']} (id={profile['id']})")
-            return profile["id"]
-        else:
-            logger.error(f"未找到用户: {username}")
-            sys.exit(1)
-    except Exception as e:
-        logger.error(f"查询 profiles 失败: {e}")
+    row = select_one("profiles", {"username": username}, columns="id,username")
+    if row:
+        logger.info(f"找到作者: {row['username']} (id={row['id']})")
+        return row["id"]
+    else:
+        logger.error(f"未找到用户: {username}")
         sys.exit(1)
 
 
-def lookup_category_id(client: "Client", category_name: str) -> str:
+def lookup_category_id(category_name: str) -> str:
     """根据分类名从 categories 表查询 category_id"""
-    try:
-        result = client.table("categories").select("id,name").eq("name", category_name).execute()
-        if result.data:
-            category = result.data[0]
-            logger.info(f"找到分类: {category['name']} (id={category['id']})")
-            return category["id"]
-        else:
-            logger.error(f"未找到分类: {category_name}")
-            sys.exit(1)
-    except Exception as e:
-        logger.error(f"查询 categories 失败: {e}")
+    row = select_one("categories", {"name": category_name}, columns="id,name")
+    if row:
+        logger.info(f"找到分类: {row['name']} (id={row['id']})")
+        return row["id"]
+    else:
+        logger.error(f"未找到分类: {category_name}")
         sys.exit(1)
 
 
@@ -241,20 +227,19 @@ def assemble_posts(news_list: list[dict], author_id: str, category_id: str) -> l
     return posts
 
 
-def batch_insert_posts(client: "Client", posts: list[dict]) -> int:
+def batch_insert_posts(posts: list[dict]) -> int:
     """批量插入帖子到 Supabase posts 表（标题去重, 标签关联）
 
     参数:
-        client: Supabase 客户端
-        posts: 帖子列表（含 _meta 字段，插入时自动去除）
+        posts: 帖子列表（含 _meta、id、tags 字段，插入时自动去除敏感字段）
 
     返回:
         成功插入的条数
     """
     # 查询现有标题，避免重复
     try:
-        existing = client.table("posts").select("title").execute()
-        existing_titles = {r["title"] for r in existing.data}
+        rows = select_all("posts", columns="title")
+        existing_titles = {r["title"] for r in rows}
         logger.info(f"数据库中已有 {len(existing_titles)} 条帖子")
     except Exception as e:
         logger.warning(f"查询现有标题失败，将全部插入: {e}")
@@ -281,10 +266,16 @@ def batch_insert_posts(client: "Client", posts: list[dict]) -> int:
             clean_batch.append(clean)
 
         try:
-            result = client.table("posts").insert(clean_batch).execute()
-            count = len(result.data)
+            # 批量插入并取回 id
+            result_rows = []
+            for clean in clean_batch:
+                result = insert_one("posts", clean, returning="id")
+                if result:
+                    result_rows.append(result)
+
+            count = len(result_rows)
             inserted += count
-            for row in result.data:
+            for row in result_rows:
                 inserted_post_ids.append(row["id"])
             logger.info(
                 f"批次 {i // BATCH_SIZE + 1}/{(total + BATCH_SIZE - 1) // BATCH_SIZE}: "
@@ -295,16 +286,15 @@ def batch_insert_posts(client: "Client", posts: list[dict]) -> int:
 
     # 处理标签关联
     if inserted > 0:
-        sync_post_tags(client, new_posts[:inserted], inserted_post_ids)
+        sync_post_tags(new_posts[:inserted], inserted_post_ids)
 
     return inserted
 
 
-def sync_post_tags(client: "Client", posts: list[dict], post_ids: list[str]) -> None:
+def sync_post_tags(posts: list[dict], post_ids: list[str]) -> None:
     """同步帖子标签：查找/创建 tag，写入 post_tags 关联表
 
     参数:
-        client: Supabase 客户端
         posts: 已插入的帖子列表
         post_ids: 对应的 post_id 列表（顺序一致）
     """
@@ -328,8 +318,10 @@ def sync_post_tags(client: "Client", posts: list[dict], post_ids: list[str]) -> 
 
     # 查询已有标签
     try:
-        existing = client.table("tags").select("id,name").in_("name", unique_names).execute()
-        existing_map = {r["name"]: r["id"] for r in existing.data}
+        placeholders = ", ".join(["%s"] * len(unique_names))
+        sql = f'SELECT id, name FROM tags WHERE name IN ({placeholders})'
+        rows = execute_sql(sql, tuple(unique_names))
+        existing_map = {r["name"]: r["id"] for r in rows} if rows else {}
     except Exception as e:
         logger.warning(f"查询标签失败: {e}")
         existing_map = {}
@@ -337,14 +329,14 @@ def sync_post_tags(client: "Client", posts: list[dict], post_ids: list[str]) -> 
     # 创建不存在的标签
     new_names = [n for n in unique_names if n not in existing_map]
     if new_names:
-        new_tags = [{"name": n, "posts_count": 0} for n in new_names]
-        try:
-            result = client.table("tags").insert(new_tags).execute()
-            for r in result.data:
-                existing_map[r["name"]] = r["id"]
-            logger.info(f"  创建 {len(result.data)} 个新标签: {new_names}")
-        except Exception as e:
-            logger.warning(f"  创建标签失败: {e}")
+        for name in new_names:
+            try:
+                result = insert_one("tags", {"name": name, "posts_count": 0}, returning="id")
+                if result:
+                    existing_map[name] = result["id"]
+            except Exception as e:
+                logger.warning(f"  创建标签 {name} 失败: {e}")
+        logger.info(f"  尝试创建 {len(new_names)} 个新标签: {new_names}")
 
     # 写入 post_tags 关联（去重）
     post_tag_records = []
@@ -359,32 +351,29 @@ def sync_post_tags(client: "Client", posts: list[dict], post_ids: list[str]) -> 
             # 先查已有关联避免重复
             all_post_ids = list(post_tag_map.keys())
             all_tag_ids = list(set(r["tag_id"] for r in post_tag_records))
-            existing_links = client.table("post_tags").select("post_id,tag_id") \
-                .in_("post_id", all_post_ids) \
-                .in_("tag_id", all_tag_ids) \
-                .execute()
-            existing_pairs = {(r["post_id"], r["tag_id"]) for r in existing_links.data}
+            post_placeholders = ", ".join(["%s"] * len(all_post_ids))
+            tag_placeholders = ", ".join(["%s"] * len(all_tag_ids))
+            sql = f'SELECT post_id, tag_id FROM post_tags WHERE post_id IN ({post_placeholders}) AND tag_id IN ({tag_placeholders})'
+            existing_links = execute_sql(sql, tuple(all_post_ids + all_tag_ids)) or []
+            existing_pairs = {(r["post_id"], r["tag_id"]) for r in existing_links}
 
             new_records = [r for r in post_tag_records if (r["post_id"], r["tag_id"]) not in existing_pairs]
             if new_records:
-                client.table("post_tags").insert(new_records).execute()
+                for r in new_records:
+                    insert_one("post_tags", r)
                 logger.info(f"  关联 {len(new_records)} 条 post_tags")
 
                 # 更新每个 tag 的 posts_count
-                tag_count_delta = {}
+                tag_count_delta: dict[str, int] = {}
                 for r in new_records:
                     tag_count_delta[r["tag_id"]] = tag_count_delta.get(r["tag_id"], 0) + 1
                 for tag_id, delta in tag_count_delta.items():
                     try:
-                        client.rpc("increment_tag_count", {"tag_id": tag_id, "delta": delta}).execute()
+                        row = select_one("tags", {"id": tag_id}, columns="posts_count")
+                        new_count = (row.get("posts_count", 0) or 0) + delta
+                        update_one("tags", {"posts_count": new_count}, {"id": tag_id})
                     except Exception:
-                        # 如果没有 rpc，直接用 update
-                        try:
-                            tag = client.table("tags").select("posts_count").eq("id", tag_id).single().execute()
-                            new_count = (tag.data.get("posts_count", 0) or 0) + delta
-                            client.table("tags").update({"posts_count": new_count}).eq("id", tag_id).execute()
-                        except Exception:
-                            pass  # 更新失败不阻塞主流程
+                        pass
         except Exception as e:
             logger.warning(f"  关联标签失败: {e}")
 
@@ -421,12 +410,9 @@ def main():
     author_username = get_env("POSTS_AUTHOR_USERNAME")
     category_name = get_env("POSTS_CATEGORY_NAME")
 
-    # 连接 Supabase (绕过代理)
-    client = get_client()
-
     # 查找 author_id 和 category_id
-    author_id = lookup_author_id(client, author_username)
-    category_id = lookup_category_id(client, category_name)
+    author_id = lookup_author_id(author_username)
+    category_id = lookup_category_id(category_name)
 
     # 组装帖子（需要外部提供 news_list 数据源）
     logger.warning("assemble_posts 已精简为 Supabase 直接入库模式，请使用 news_scraper.py --save")
@@ -435,7 +421,7 @@ def main():
     # 写入数据库
     if args.save:
         logger.info("开始写入 Supabase posts 表...")
-        inserted = batch_insert_posts(client, posts)
+        inserted = batch_insert_posts(posts)
         logger.info(f"写入完成，成功插入 {inserted}/{len(posts)} 条")
 
     logger.info("=== 组装完成 ===")

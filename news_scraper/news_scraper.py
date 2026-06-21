@@ -14,18 +14,16 @@ import base64
 import logging
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 # 子进程执行时需要项目根目录在 sys.path 中
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
-from supabase_client import get_client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, upsert_one, get_connection, execute_sql
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
-
-if TYPE_CHECKING:
-    from supabase import Client
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -197,38 +195,38 @@ def scrape_binance_news(scroll_times=3, max_articles=50):
     return articles_data
 
 
-# ═══════════════════════ Supabase 入库相关 ═══════════════════════
+# ═══════════════════════ 数据库入库相关（直连 PostgreSQL） ═══════════════════════
 
 
-def lookup_author_id(client: "Client") -> str:
+def lookup_author_id() -> str:
     """根据配置的用户名查询 author_id"""
     username = os.environ.get("POSTS_AUTHOR_USERNAME")
     if not username:
         logger.error("缺少 POSTS_AUTHOR_USERNAME 环境变量")
         sys.exit(1)
-    result = client.table("profiles").select("id,username").eq("username", username).execute()
-    if result.data:
-        logger.info(f"作者: {username} (id={result.data[0]['id']})")
-        return result.data[0]["id"]
+    row = select_one("profiles", {"username": username}, columns="id,username")
+    if row:
+        logger.info(f"作者: {username} (id={row['id']})")
+        return row["id"]
     logger.error(f"未找到用户: {username}")
     sys.exit(1)
 
 
-def lookup_category_id(client: "Client") -> str:
+def lookup_category_id() -> str:
     """根据配置的分类名查询 category_id"""
     name = os.environ.get("POSTS_CATEGORY_NAME", "news")
-    result = client.table("categories").select("id,name").eq("name", name).execute()
-    if result.data:
-        logger.info(f"分类: {name} (id={result.data[0]['id']})")
-        return result.data[0]["id"]
+    row = select_one("categories", {"name": name}, columns="id,name")
+    if row:
+        logger.info(f"分类: {name} (id={row['id']})")
+        return row["id"]
     logger.error(f"未找到分类: {name}")
     sys.exit(1)
 
 
-def load_existing_titles(client: "Client") -> set[str]:
+def load_existing_titles() -> set[str]:
     """加载数据库中已有的帖子标题"""
-    result = client.table("posts").select("title").execute()
-    titles = {r["title"] for r in result.data}
+    rows = select_all("posts", columns="title")
+    titles = {r["title"] for r in rows}
     logger.info(f"数据库中已有 {len(titles)} 条帖子")
     return titles
 
@@ -311,7 +309,7 @@ def build_html_content(article: dict, image_list: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def sync_tags_for_post(client: "Client", post_id: str, tag_names: list[str]) -> None:
+def sync_tags_for_post(post_id: str, tag_names: list[str]) -> None:
     """为单篇文章同步标签：查找/创建 tag，写入 post_tags 关联"""
     if not tag_names:
         return
@@ -320,22 +318,25 @@ def sync_tags_for_post(client: "Client", post_id: str, tag_names: list[str]) -> 
     cleaned = [t.lstrip("#") for t in tag_names]
     unique_names = list(set(cleaned))
 
-    # 查询已有标签
-    try:
-        existing = client.table("tags").select("id,name").in_("name", unique_names).execute()
-        existing_map = {r["name"]: r["id"] for r in existing.data}
-    except Exception:
-        existing_map = {}
+    # 查询已有标签（使用 IN 查询）
+    existing_map = {}
+    if unique_names:
+        placeholders = ", ".join(["%s"] * len(unique_names))
+        sql = f'SELECT id, name FROM tags WHERE name IN ({placeholders})'
+        rows = execute_sql(sql, tuple(unique_names))
+        if rows:
+            existing_map = {r["name"]: r["id"] for r in rows}
 
     # 创建新标签
     new_names = [n for n in unique_names if n not in existing_map]
     if new_names:
-        try:
-            result = client.table("tags").insert([{"name": n, "posts_count": 0} for n in new_names]).execute()
-            for r in result.data:
-                existing_map[r["name"]] = r["id"]
-        except Exception:
-            pass
+        for name in new_names:
+            try:
+                result = insert_one("tags", {"name": name, "posts_count": 0}, returning="id")
+                if result:
+                    existing_map[name] = result["id"]
+            except Exception:
+                pass
 
     # 写入 post_tags 关联 + 更新计数
     for name in unique_names:
@@ -344,18 +345,19 @@ def sync_tags_for_post(client: "Client", post_id: str, tag_names: list[str]) -> 
             continue
         try:
             # 检查是否已有关联
-            link = client.table("post_tags").select("post_id").eq("post_id", post_id).eq("tag_id", tag_id).execute()
-            if not link.data:
-                client.table("post_tags").insert({"post_id": post_id, "tag_id": tag_id}).execute()
+            link = select_one("post_tags", {"post_id": post_id, "tag_id": tag_id}, columns="post_id")
+            if not link:
+                insert_one("post_tags", {"post_id": post_id, "tag_id": tag_id})
                 # 更新 posts_count
-                tag = client.table("tags").select("posts_count").eq("id", tag_id).single().execute()
-                new_count = (tag.data.get("posts_count", 0) or 0) + 1
-                client.table("tags").update({"posts_count": new_count}).eq("id", tag_id).execute()
+                tag = select_one("tags", {"id": tag_id}, columns="posts_count")
+                if tag:
+                    new_count = (tag.get("posts_count", 0) or 0) + 1
+                    update_one("tags", {"posts_count": new_count}, {"id": tag_id})
         except Exception:
             pass
 
 
-def insert_one_post(client: "Client", article: dict, author_id: str, category_id: str,
+def insert_one_post(article: dict, author_id: str, category_id: str,
                     existing_titles: set) -> bool:
     """将单条新闻组装并入库，标题已存在则跳过"""
     title = article["title"]
@@ -392,17 +394,19 @@ def insert_one_post(client: "Client", article: dict, author_id: str, category_id
     }
 
     try:
-        result = client.table("posts").insert(post_data).execute()
-        post_id = result.data[0]["id"]
-        existing_titles.add(title)
+        result = insert_one("posts", post_data, returning="id")
+        if result:
+            post_id = result["id"]
+            existing_titles.add(title)
 
-        # 同步标签
-        tags = article.get("tags", [])
-        if tags:
-            sync_tags_for_post(client, post_id, tags)
+            # 同步标签
+            tags = article.get("tags", [])
+            if tags:
+                sync_tags_for_post(post_id, tags)
 
-        logger.info(f"  [入库] {title[:40]} | tags={tags}")
-        return True
+            logger.info(f"  [入库] {title[:40]} | tags={tags}")
+            return True
+        return False
     except Exception as e:
         logger.error(f"  [失败] {title[:40]}: {e}")
         return False
@@ -411,7 +415,7 @@ def insert_one_post(client: "Client", article: dict, author_id: str, category_id
 # ═══════════════════════ 抓取相关 ═══════════════════════
 
 def fetch_article_images(page, articles: list[dict],
-                         save_to_db=False, client=None, author_id=None,
+                         save_to_db=False, author_id=None,
                          category_id=None, existing_titles=None) -> None:
     """访问每篇文章详情页，抓取图片和标签，可选直接入库"""
     saved = 0
@@ -490,8 +494,8 @@ def fetch_article_images(page, articles: list[dict],
             logger.info(f"  图片 {len(article['images'])} 张, 标签 {len(article['tags'])} 个")
 
             # 直接入库
-            if save_to_db and client and author_id and category_id and existing_titles is not None:
-                if insert_one_post(client, article, author_id, category_id, existing_titles):
+            if save_to_db and author_id and category_id and existing_titles is not None:
+                if insert_one_post(article, author_id, category_id, existing_titles):
                     saved += 1
 
         except Exception as e:
@@ -535,12 +539,11 @@ def main():
         return
 
     # 准备入库环境
-    client = author_id = category_id = existing_titles = None
+    author_id = category_id = existing_titles = None
     if args.save:
-        client = get_client()
-        author_id = lookup_author_id(client)
-        category_id = lookup_category_id(client)
-        existing_titles = load_existing_titles(client)
+        author_id = lookup_author_id()
+        category_id = lookup_category_id()
+        existing_titles = load_existing_titles()
 
     # 逐篇抓取详情（图片 + 标签）并可选入库
     logger.info(f"开始处理 {len(articles)} 篇文章...")
@@ -571,7 +574,6 @@ def main():
 
         fetch_article_images(page, articles,
                              save_to_db=args.save,
-                             client=client,
                              author_id=author_id,
                              category_id=category_id,
                              existing_titles=existing_titles)

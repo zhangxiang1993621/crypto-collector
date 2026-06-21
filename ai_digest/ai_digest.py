@@ -20,7 +20,8 @@ from datetime import datetime, timezone
 
 import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -36,50 +37,50 @@ DEEPSEEK_BASE = "https://api.deepseek.com"
 
 # ────────────────────── 配置 ──────────────────────
 
-def get_client() -> Client:
-    url = os.environ["SUPABASE_URL"]
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    return create_client(url, key)
-
-
 def get_deepseek_key() -> str:
     return os.environ["DEEPSEEK_API_KEY"]
 
 
-# ────────────────────── 数据查询 ──────────────────────
+# ────────────────────── 数据查询（直连 PostgreSQL） ──────────────────────
 
-def fetch_news_posts(client: Client, limit: int) -> list[str]:
+def fetch_news_posts(limit: int) -> list[str]:
     """查询 news 分类最新帖子，返回纯文本列表"""
-    cat_r = client.table("categories").select("id").eq("name", "news").execute()
-    if not cat_r.data:
+    cat_row = select_one("categories", {"name": "news"}, columns="id")
+    if not cat_row:
         logger.error("未找到 news 分类")
         sys.exit(1)
 
-    result = client.table("posts").select("title,content").eq(
-        "category_id", cat_r.data[0]["id"]
-    ).order("created_at", desc=True).limit(limit).execute()
+    sql = '''
+        SELECT title, content FROM posts 
+        WHERE category_id = %s 
+        ORDER BY created_at DESC 
+        LIMIT %s
+    '''
+    rows = execute_sql(sql, (cat_row["id"], limit), fetch=True)
+    if not rows:
+        return []
 
     texts = []
-    for p in result.data:
+    for p in rows:
         plain = re.sub(r'<[^>]+>', ' ', p["content"])
         plain = re.sub(r'\s+', ' ', plain).strip()
         if len(plain) >= 30:
             texts.append(f"{p['title']}\n{plain[:400]}")
 
-    logger.info(f"查询到 {len(result.data)} 条新闻, 有效 {len(texts)} 条")
+    logger.info(f"查询到 {len(rows)} 条新闻, 有效 {len(texts)} 条")
     return texts
 
 
-def lookup_admin(client: Client) -> dict:
+def lookup_admin() -> dict:
     username = os.environ.get("POSTS_AUTHOR_USERNAME", "indoAdmin")
-    result = client.table("profiles").select("id,username").eq("username", username).execute()
-    return result.data[0]
+    row = select_one("profiles", {"username": username}, columns="id,username")
+    return row
 
 
-def get_hot_tokens_cat_id(client: Client) -> str:
+def get_hot_tokens_cat_id() -> str:
     name = os.environ.get("HOT_TOKENS_CATEGORY_NAME", "Hot Tokens")
-    result = client.table("categories").select("id").eq("name", name).execute()
-    return result.data[0]["id"]
+    row = select_one("categories", {"name": name}, columns="id")
+    return row["id"]
 
 
 # ────────────────────── AI 调用 ──────────────────────
@@ -177,36 +178,40 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-# ────────────────────── 标签 ──────────────────────
+# ────────────────────── 标签（直连 PostgreSQL） ──────────────────────
 
-def sync_tags(client: Client, post_id: str, tags: list[str]) -> None:
+def sync_tags(post_id: str, tags: list[str]) -> None:
     if not tags:
         return
     unique = list(set(tags))
     existing_map = {}
-    try:
-        r = client.table("tags").select("id,name").in_("name", unique).execute()
-        existing_map = {d["name"]: d["id"] for d in r.data}
-    except Exception:
-        pass
+
+    # 使用 IN 查询
+    if unique:
+        placeholders = ", ".join(["%s"] * len(unique))
+        sql = f'SELECT id, name FROM tags WHERE name IN ({placeholders})'
+        rows = execute_sql(sql, tuple(unique))
+        if rows:
+            existing_map = {d["name"]: d["id"] for d in rows}
 
     new = [n for n in unique if n not in existing_map]
     if new:
-        try:
-            r = client.table("tags").insert([{"name": n, "posts_count": 0} for n in new]).execute()
-            for d in r.data:
-                existing_map[d["name"]] = d["id"]
-        except Exception:
-            pass
+        for name in new:
+            try:
+                result = insert_one("tags", {"name": name, "posts_count": 0}, returning="id")
+                if result:
+                    existing_map[name] = result["id"]
+            except Exception:
+                pass
 
     for name in unique:
         tid = existing_map.get(name)
         if not tid:
             continue
         try:
-            link = client.table("post_tags").select("post_id").eq("post_id", post_id).eq("tag_id", tid).execute()
-            if not link.data:
-                client.table("post_tags").insert({"post_id": post_id, "tag_id": tid}).execute()
+            link = select_one("post_tags", {"post_id": post_id, "tag_id": tid}, columns="post_id")
+            if not link:
+                insert_one("post_tags", {"post_id": post_id, "tag_id": tid})
         except Exception:
             pass
 
@@ -215,8 +220,7 @@ def sync_tags(client: Client, post_id: str, tags: list[str]) -> None:
 
 def run(save: bool = False, max_news: int = 10):
     logger.info("=== 管理员 AI 加密日报 ===")
-    client = get_client()
-    news = fetch_news_posts(client, max_news)
+    news = fetch_news_posts(max_news)
 
     if not news:
         logger.warning("无有效新闻")
@@ -231,11 +235,11 @@ def run(save: bool = False, max_news: int = 10):
     logger.info(f"标签: {ai.get('tags', [])}")
 
     if save:
-        admin = lookup_admin(client)
-        cat_id = get_hot_tokens_cat_id(client)
+        admin = lookup_admin()
+        cat_id = get_hot_tokens_cat_id()
         now = datetime.now(timezone.utc).isoformat()
 
-        resp = client.table("posts").insert({
+        result = insert_one("posts", {
             "title": ai["title"],
             "content": html,
             "author_id": admin["id"],
@@ -243,11 +247,11 @@ def run(save: bool = False, max_news: int = 10):
             "status": "pending_review",
             "created_at": now,
             "updated_at": now,
-        }).execute()
+        }, returning="id")
 
-        pid = resp.data[0]["id"]
+        pid = result["id"]
         tags = ai.get("tags", []) + ["AI分析", "CryptoAI", "MarketDigest"]
-        sync_tags(client, pid, tags)
+        sync_tags(pid, tags)
         logger.info(f"[入库] id={pid[:8]}... 标签: {tags}")
 
     logger.info("=== 日报完成 ===")

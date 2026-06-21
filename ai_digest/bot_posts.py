@@ -24,14 +24,10 @@ from datetime import datetime, timezone
 # 子进程执行时需要项目根目录在 sys.path 中
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from typing import TYPE_CHECKING
-
 import httpx
 from dotenv import load_dotenv
-from supabase_client import get_client
-
-if TYPE_CHECKING:
-    from supabase import Client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -57,35 +53,41 @@ def extract_text(html: str) -> str:
     return re.sub(r'\s+', ' ', t).strip()
 
 
-# ────────────────────── 数据 ──────────────────────
+# ────────────────────── 数据（直连 PostgreSQL） ──────────────────────
 
-def fetch_news_texts(client: "Client", limit: int) -> list[str]:
+def fetch_news_texts(limit: int) -> list[str]:
     """获取最新新闻标题+摘要供 AI 参考"""
-    cat_r = client.table("categories").select("id").eq("name", "news").execute()
-    if not cat_r.data:
+    cat_row = select_one("categories", {"name": "news"}, columns="id")
+    if not cat_row:
         return []
-    cat_id = cat_r.data[0]["id"]
+    cat_id = cat_row["id"]
 
-    r = client.table("posts").select("title,content").eq(
-        "category_id", cat_id
-    ).order("created_at", desc=True).limit(limit).execute()
+    sql = '''
+        SELECT title, content FROM posts 
+        WHERE category_id = %s 
+        ORDER BY created_at DESC 
+        LIMIT %s
+    '''
+    rows = execute_sql(sql, (cat_id, limit))
 
     texts = []
-    for p in r.data:
-        plain = extract_text(p["content"])
-        if len(plain) >= 30:
-            texts.append(f"{p['title']}\n{plain[:350]}")
+    if rows:
+        for p in rows:
+            plain = extract_text(p["content"])
+            if len(plain) >= 30:
+                texts.append(f"{p['title']}\n{plain[:350]}")
     return texts
 
 
-def get_bots(client: "Client", count: int) -> list[dict]:
-    r = client.table("profiles").select("id,username").eq("is_bot", True).execute()
-    return random.sample(r.data, min(count, len(r.data)))
+def get_bots(count: int) -> list[dict]:
+    rows = select_all("profiles", {"is_bot": True}, columns="id,username")
+    return random.sample(rows, min(count, len(rows))) if rows else []
 
 
-def get_cat_id(client: "Client") -> str:
+def get_cat_id() -> str:
     name = os.environ.get("HOT_TOKENS_CATEGORY_NAME", "Hot Tokens")
-    return client.table("categories").select("id").eq("name", name).execute().data[0]["id"]
+    row = select_one("categories", {"name": name}, columns="id")
+    return row["id"]
 
 
 # ────────────────────── AI 生成 ──────────────────────
@@ -216,34 +218,38 @@ def build_post_html(body: str) -> str:
     return f'<p style="font-size:16px;line-height:1.9;color:#333;">{body}</p>'
 
 
-# ────────────────────── 标签 ──────────────────────
+# ────────────────────── 标签（直连 PostgreSQL） ──────────────────────
 
-def sync_tags(client: "Client", post_id: str, tags: list[str]) -> None:
+def sync_tags(post_id: str, tags: list[str]) -> None:
     if not tags:
         return
     unique = list(set(tags))
     em = {}
-    try:
-        r = client.table("tags").select("id,name").in_("name", unique).execute()
-        em = {d["name"]: d["id"] for d in r.data}
-    except Exception:
-        pass
+    if unique:
+        placeholders = ", ".join(["%s"] * len(unique))
+        sql = f'SELECT id, name FROM tags WHERE name IN ({placeholders})'
+        rows = execute_sql(sql, tuple(unique))
+        if rows:
+            em = {d["name"]: d["id"] for d in rows}
+
     new = [n for n in unique if n not in em]
     if new:
-        try:
-            r = client.table("tags").insert([{"name": n, "posts_count": 0} for n in new]).execute()
-            for d in r.data:
-                em[d["name"]] = d["id"]
-        except Exception:
-            pass
+        for name in new:
+            try:
+                result = insert_one("tags", {"name": name, "posts_count": 0}, returning="id")
+                if result:
+                    em[name] = result["id"]
+            except Exception:
+                pass
+
     for name in unique:
         tid = em.get(name)
         if not tid:
             continue
         try:
-            lk = client.table("post_tags").select("post_id").eq("post_id", post_id).eq("tag_id", tid).execute()
-            if not lk.data:
-                client.table("post_tags").insert({"post_id": post_id, "tag_id": tid}).execute()
+            link = select_one("post_tags", {"post_id": post_id, "tag_id": tid}, columns="post_id")
+            if not link:
+                insert_one("post_tags", {"post_id": post_id, "tag_id": tid})
         except Exception:
             pass
 
@@ -252,15 +258,14 @@ def sync_tags(client: "Client", post_id: str, tags: list[str]) -> None:
 
 def run(save: bool = False, bot_count: int = 5, max_news: int = 15):
     logger.info("=== 机器人独立发帖 ===")
-    client = get_client()
-    news = fetch_news_texts(client, max_news)
+    news = fetch_news_texts(max_news)
 
     if not news:
         logger.warning("无有效新闻")
         return
 
     news_brief = "\n\n".join(f"- {t}" for t in news)
-    bots = get_bots(client, bot_count)
+    bots = get_bots(bot_count)
     logger.info(f"选择 {len(bots)} 个机器人发帖")
 
     api_key = get_deepseek_key()
@@ -287,11 +292,11 @@ def run(save: bool = False, bot_count: int = 5, max_news: int = 15):
         logger.info(f"  [{name}] {ai['title'][:50]}")
 
     if save:
-        cat_id = get_cat_id(client)
+        cat_id = get_cat_id()
         now = datetime.now(timezone.utc).isoformat()
         saved = 0
         for p in posts:
-            resp = client.table("posts").insert({
+            result = insert_one("posts", {
                 "title": p["title"],
                 "content": p["content"],
                 "author_id": p["bot"]["id"],
@@ -299,8 +304,8 @@ def run(save: bool = False, bot_count: int = 5, max_news: int = 15):
                 "status": "pending_review",
                 "created_at": now,
                 "updated_at": now,
-            }).execute()
-            sync_tags(client, resp.data[0]["id"], p["tags"])
+            }, returning="id")
+            sync_tags(result["id"], p["tags"])
             saved += 1
         logger.info(f"[入库] {saved} 篇")
 

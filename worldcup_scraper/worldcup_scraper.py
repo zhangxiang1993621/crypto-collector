@@ -24,7 +24,6 @@ import logging
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -32,10 +31,8 @@ import httpx
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
-from supabase_client import get_client
-
-if TYPE_CHECKING:
-    from supabase import Client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, update_one, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -150,48 +147,44 @@ def get_team_info(team_name: str) -> tuple[str, str]:
     return "🏳️", team_name
 
 
-# ────────────────────── 数据库工具 ──────────────────────
+# ────────────────────── 数据库工具（直连 PostgreSQL） ──────────────────────
 
-def get_cat_id(client: "Client") -> str:
+def get_cat_id() -> str:
     """获取 Sports Talk 分类 ID"""
     name = os.environ.get("FIFA_CATEGORY_NAME", "Sports Talk")
-    r = client.table("categories").select("id").eq("name", name).execute()
-    if not r.data:
+    row = select_one("categories", {"name": name}, columns="id")
+    if not row:
         logger.error(f"未找到分类: {name}")
         sys.exit(1)
-    return r.data[0]["id"]
+    return row["id"]
 
 
-def get_author_id(client: "Client") -> str:
+def get_author_id() -> str:
     """获取 indoAdmin 用户 ID"""
     username = os.environ.get("POSTS_AUTHOR_USERNAME", "indoAdmin")
-    r = client.table("profiles").select("id,username").eq("username", username).execute()
-    if not r.data:
+    row = select_one("profiles", {"username": username}, columns="id,username")
+    if not row:
         logger.error(f"未找到用户: {username}")
         sys.exit(1)
-    return r.data[0]["id"]
+    return row["id"]
 
 
-def sync_tag(client: "Client", post_id: str, tag_name: str) -> None:
+def sync_tag(post_id: str, tag_name: str) -> None:
     """查找或创建标签，建立 post_tags 关联"""
-    r = client.table("tags").select("id,name").eq("name", tag_name).execute()
-    if r.data:
-        tag_id = r.data[0]["id"]
+    row = select_one("tags", {"name": tag_name}, columns="id,name")
+    if row:
+        tag_id = row["id"]
     else:
-        resp = client.table("tags").insert({"name": tag_name, "posts_count": 0}).execute()
-        tag_id = resp.data[0]["id"]
+        result = insert_one("tags", {"name": tag_name, "posts_count": 0}, returning="id")
+        tag_id = result["id"]
 
-    rel = client.table("post_tags").select("post_id").eq(
-        "post_id", post_id
-    ).eq("tag_id", tag_id).execute()
-    if not rel.data:
-        client.table("post_tags").insert({
-            "post_id": post_id, "tag_id": tag_id
-        }).execute()
+    link = select_one("post_tags", {"post_id": post_id, "tag_id": tag_id}, columns="post_id")
+    if not link:
+        insert_one("post_tags", {"post_id": post_id, "tag_id": tag_id})
 
-    count_r = client.table("post_tags").select("*", count="exact").eq("tag_id", tag_id).execute()
-    count = count_r.count if count_r.count else 1
-    client.table("tags").update({"posts_count": count}).eq("id", tag_id).execute()
+    rows = select_all("post_tags", {"tag_id": tag_id}, columns="*")
+    count = len(rows) if rows else 1
+    update_one("tags", {"posts_count": count}, {"id": tag_id})
 
 
 # ────────────────────── 比赛列表 ──────────────────────
@@ -536,7 +529,6 @@ def make_post_title(m: dict) -> str:
 # ────────────────────── 入库（upsert）──────────────────────
 
 def upsert_post(
-    client: "Client",
     m: dict,
     author_id: str,
     cat_id: str,
@@ -553,18 +545,18 @@ def upsert_post(
     is_hot = is_match_live(m)
 
     # 检查帖子是否已存在
-    r = client.table("posts").select("id").eq("title", title).execute()
+    row = select_one("posts", {"title": title}, columns="id")
 
-    if r.data:
-        post_id = r.data[0]["id"]
-        client.table("posts").update({
+    if row:
+        post_id = row["id"]
+        update_one("posts", {
             "content": content,
             "is_hot": is_hot,
             "updated_at": now,
-        }).eq("id", post_id).execute()
+        }, {"id": post_id})
         logger.info(f"  [更新] {title[:60]}... 比分: {get_score_text(m)}  hot={is_hot}")
     else:
-        resp = client.table("posts").insert({
+        result = insert_one("posts", {
             "title": title[:200],
             "content": content,
             "author_id": author_id,
@@ -573,14 +565,14 @@ def upsert_post(
             "is_hot": is_hot,
             "created_at": now,
             "updated_at": now,
-        }).execute()
-        post_id = resp.data[0]["id"]
+        }, returning="id")
+        post_id = result["id"]
         logger.info(f"  [新建] {title[:60]}...  hot={is_hot}")
 
     # 同步标签
     if post_id:
         for tag in tag_names:
-            sync_tag(client, post_id, tag)
+            sync_tag(post_id, tag)
 
     return post_id
 
@@ -634,17 +626,14 @@ def run(
         return
 
     # ── Step 4: 入库 ──
-    client = get_client()
-    author_id = get_author_id(client)
-    cat_id = get_cat_id(client)
+    author_id = get_author_id()
+    cat_id = get_cat_id()
 
     tag_names = ["2026世界杯", "WorldCup2026", "美加墨世界杯"]
     if scores_only:
-        existing = client.table("posts").select("id,title").eq(
-            "category_id", cat_id
-        ).execute()
+        rows = select_all("posts", {"category_id": cat_id}, columns="id,title")
         existing_titles = {d["title"].split(" — ")[0] if " — " in d["title"] else d["title"]: d["id"]
-                          for d in existing.data}
+                          for d in rows}
 
         updated = 0
         for m in matches:
@@ -653,11 +642,11 @@ def run(
                 content = build_post_html(m)
                 pid = existing_titles[title]
                 is_hot = is_match_live(m)
-                client.table("posts").update({
+                update_one("posts", {
                     "content": content,
                     "is_hot": is_hot,
                     "updated_at": datetime.now(timezone.utc).isoformat(),
-                }).eq("id", pid).execute()
+                }, {"id": pid})
                 updated += 1
                 logger.info(f"  [比分更新] {m['host_team']} vs {m['away_team']}: {get_score_text(m)}  hot={is_hot}")
         logger.info(f"比分更新完成: {updated} 条")
@@ -665,7 +654,7 @@ def run(
         # 首次爬取：为每场比赛创建帖子
         for m in matches:
             try:
-                upsert_post(client, m, author_id, cat_id, tag_names)
+                upsert_post(m, author_id, cat_id, tag_names)
             except Exception as e:
                 logger.error(f"  入库失败 [{m['host_team']} vs {m['away_team']}]: {e}")
 
@@ -679,19 +668,12 @@ def refix_posts() -> None:
     """
     logger.info("=== 世界杯帖子内容强制重生成（国旗修复模式）===")
 
-    client = get_client()
-    if client is None:
-        logger.error("无法连接 Supabase")
-        return
-
-    cat_id = get_cat_id(client)
-    author_id = get_author_id(client)
+    cat_id = get_cat_id()
+    author_id = get_author_id()
 
     # 获取所有已有帖子
-    existing = client.table("posts").select("id,title").eq(
-        "category_id", cat_id
-    ).execute()
-    logger.info(f"已有 {len(existing.data)} 条世界杯帖子")
+    rows = select_all("posts", {"category_id": cat_id}, columns="id,title")
+    logger.info(f"已有 {len(rows)} 条世界杯帖子")
 
     # 获取所有比赛
     all_matches = fetch_matches_from_api()
@@ -715,28 +697,28 @@ def refix_posts() -> None:
 
         # 在已有帖子中查找匹配：title 含 host vs away
         found_id = None
-        for post in existing.data:
-            title = post["title"]
+        for row in rows:
+            title = row["title"]
             if host.lower() in title.lower() and away.lower() in title.lower() and "vs" in title.lower():
-                found_id = post["id"]
+                found_id = row["id"]
                 break
 
         if found_id:
             content = build_post_html(m)
             title = make_post_title(m)[:200]
             is_hot = is_match_live(m)
-            client.table("posts").update({
+            update_one("posts", {
                 "title": title,
                 "content": content,
                 "is_hot": is_hot,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", found_id).execute()
+            }, {"id": found_id})
             updated += 1
             logger.info(f"  [重建] {host} vs {away}  → post {found_id[:8]}  hot={is_hot}")
         else:
             # 帖子不存在，创建新帖
             try:
-                upsert_post(client, m, author_id, cat_id, tag_names)
+                upsert_post(m, author_id, cat_id, tag_names)
                 updated += 1
                 logger.info(f"  [新建] {host} vs {away}")
             except Exception as e:

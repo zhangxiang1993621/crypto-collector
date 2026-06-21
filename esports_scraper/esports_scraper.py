@@ -17,17 +17,13 @@ import random
 import logging
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
-from supabase_client import get_client
-
-if TYPE_CHECKING:
-    from supabase import Client
-    from playwright.sync_api import Page
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -55,28 +51,30 @@ API_HEADERS = {
     ),
 }
 
-# ────────────────────── 工具 ──────────────────────
+# ────────────────────── 工具（直连 PostgreSQL） ──────────────────────
 
 
-def get_cat_id(client: "Client") -> str:
+def get_cat_id() -> str:
     name = os.environ.get("ESPers_CATEGORY_NAME", "E-Sports")
-    r = client.table("categories").select("id").eq("name", name).execute()
-    if not r.data:
+    row = select_one("categories", {"name": name}, columns="id")
+    if not row:
         logger.error(f"未找到分类: {name}")
         sys.exit(1)
-    return r.data[0]["id"]
+    return row["id"]
 
 
-def get_random_indo_admin(client: "Client") -> dict:
+def get_random_indo_admin() -> dict:
     """从 indoAdmin 用户中随机抽取发帖人"""
-    r = client.table("profiles").select("id,username").like("username", "%indoAdmin%").execute()
-    if not r.data:
+    rows = select_all("profiles", {}, columns="id,username")
+    indo_admin_rows = [r for r in rows if "indoAdmin" in r.get("username", "")]
+    if not indo_admin_rows:
         # 回退：使用普通机器人
-        r = client.table("profiles").select("id,username").eq("is_bot", True).execute()
-        if not r.data:
+        bot_rows = [r for r in rows if r.get("is_bot")]
+        if not bot_rows:
             logger.error("无可用发帖人")
             sys.exit(1)
-    return random.choice(r.data)
+        return random.choice(bot_rows)
+    return random.choice(indo_admin_rows)
 
 
 def _e(text: str) -> str:
@@ -237,45 +235,41 @@ def build_post_html(item: dict) -> str:
     return "\n".join(parts)
 
 
-# ────────────────────── 标签 ──────────────────────
+# ────────────────────── 标签（直连 PostgreSQL） ──────────────────────
 
-def sync_tags(client: "Client", post_id: str, tags: list[str]) -> None:
+def sync_tags(post_id: str, tags: list[str]) -> None:
     if not tags:
         return
     unique = list(set(tags))
     em = {}
-    try:
-        r = client.table("tags").select("id,name").in_("name", unique).execute()
-        em = {d["name"]: d["id"] for d in r.data}
-    except Exception:
-        pass
+    if unique:
+        placeholders = ", ".join(["%s"] * len(unique))
+        sql = f'SELECT id, name FROM tags WHERE name IN ({placeholders})'
+        rows = execute_sql(sql, tuple(unique))
+        if rows:
+            em = {d["name"]: d["id"] for d in rows}
     new = [n for n in unique if n not in em]
     if new:
-        try:
-            r = client.table("tags").insert(
-                [{"name": n, "posts_count": 0} for n in new]
-            ).execute()
-            for d in r.data:
-                em[d["name"]] = d["id"]
-        except Exception:
-            pass
+        for name in new:
+            try:
+                result = insert_one("tags", {"name": name, "posts_count": 0}, returning="id")
+                if result:
+                    em[name] = result["id"]
+            except Exception:
+                pass
     for name in unique:
         tid = em.get(name)
         if not tid:
             continue
         try:
-            lk = client.table("post_tags").select("post_id").eq(
-                "post_id", post_id
-            ).eq("tag_id", tid).execute()
-            if not lk.data:
-                client.table("post_tags").insert({
-                    "post_id": post_id, "tag_id": tid
-                }).execute()
+            link = select_one("post_tags", {"post_id": post_id, "tag_id": tid}, columns="post_id")
+            if not link:
+                insert_one("post_tags", {"post_id": post_id, "tag_id": tid})
         except Exception:
             pass
 
 
-# ────────────────────── 去重 ──────────────────────
+# ────────────────────── 去重（直连 PostgreSQL） ──────────────────────
 
 def deduplicate(items: list[dict]) -> list[dict]:
     seen = set()
@@ -288,25 +282,21 @@ def deduplicate(items: list[dict]) -> list[dict]:
     return result
 
 
-def check_existing_posts(client: "Client", cat_id: str, items: list[dict]) -> list[dict]:
+def check_existing_posts(cat_id: str, items: list[dict]) -> list[dict]:
     """检查数据库中是否已有相同标题的帖子"""
     if not items:
         return items
 
     titles = [item["title"][:200] for item in items]
-    try:
-        r = client.table("posts").select("title").eq(
-            "category_id", cat_id
-        ).in_("title", titles).execute()
-        existing_titles = {d["title"] for d in r.data}
-        new_items = [item for item in items if item["title"][:200] not in existing_titles]
-        skipped = len(items) - len(new_items)
-        if skipped:
-            logger.info(f"  跳过 {skipped} 篇已存在的文章")
-        return new_items
-    except Exception as e:
-        logger.warning(f"  去重查询失败: {e}")
-        return items
+    placeholders = ", ".join(["%s"] * len(titles))
+    sql = f'SELECT title FROM posts WHERE category_id = %s AND title IN ({placeholders})'
+    rows = execute_sql(sql, (cat_id, *titles))
+    existing_titles = {d["title"] for d in rows} if rows else set()
+    new_items = [item for item in items if item["title"][:200] not in existing_titles]
+    skipped = len(items) - len(new_items)
+    if skipped:
+        logger.info(f"  跳过 {skipped} 篇已存在的文章")
+    return new_items
 
 
 # ────────────────────── 主流程 ──────────────────────
@@ -337,11 +327,10 @@ def run(save: bool = False, max_items: int = 10):
 
     if save:
         # ── 第三步：连接数据库 ──
-        client = get_client()
-        cat_id = get_cat_id(client)
+        cat_id = get_cat_id()
 
         # ── 第四步：去重（检查已有帖子）──
-        articles = check_existing_posts(client, cat_id, articles)
+        articles = check_existing_posts(cat_id, articles)
         if not articles:
             logger.info("无新文章需要发布")
             return
@@ -367,7 +356,7 @@ def run(save: bool = False, max_items: int = 10):
                 art = fetch_article_detail(page, art)
 
                 # 选发帖人
-                bot = get_random_indo_admin(client)
+                bot = get_random_indo_admin()
                 if now_iso is None:
                     from datetime import datetime, timezone
                     now_iso = datetime.now(timezone.utc).isoformat()
@@ -380,7 +369,7 @@ def run(save: bool = False, max_items: int = 10):
                 tags.extend(["E-Sports", "Indonesia", "DuniaGames"])
 
                 try:
-                    resp = client.table("posts").insert({
+                    result = insert_one("posts", {
                         "title": art["title"][:200],
                         "content": content,
                         "author_id": bot["id"],
@@ -388,8 +377,8 @@ def run(save: bool = False, max_items: int = 10):
                         "status": "pending_review",
                         "created_at": now_iso,
                         "updated_at": now_iso,
-                    }).execute()
-                    sync_tags(client, resp.data[0]["id"], tags)
+                    }, returning="id")
+                    sync_tags(result["id"], tags)
                     saved += 1
                     logger.info(f"  [入库] [{bot['username']}] {art['title'][:50]}...")
                 except Exception as e:

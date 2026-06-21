@@ -16,17 +16,14 @@ import json
 import logging
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
-from supabase_client import get_client
-
-if TYPE_CHECKING:
-    from supabase import Client
+# 直连数据库（绕过 REST API 作业限制）
+from db_direct import select_one, select_all, insert_one, update_one, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -86,14 +83,16 @@ def get_headers() -> dict:
 
 
 
-def get_cat_id(client):
+def get_cat_id():
     name = os.environ.get("HOT_TOKENS_CATEGORY_NAME", "Hot Tokens")
-    return client.table("categories").select("id").eq("name", name).execute().data[0]["id"]
+    row = select_one("categories", {"name": name}, columns="id")
+    return row["id"]
 
 
-def lookup_author(client):
+def lookup_author():
     username = os.environ.get("POSTS_AUTHOR_USERNAME", "indoAdmin")
-    return client.table("profiles").select("id,username").eq("username", username).execute().data[0]
+    row = select_one("profiles", {"username": username}, columns="id,username")
+    return row
 
 
 def match_airdrop(text: str) -> bool:
@@ -343,34 +342,36 @@ def _e(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-# ────────────────────── 标签 ──────────────────────
+# ────────────────────── 标签（直连 PostgreSQL） ──────────────────────
 
-def sync_tags(client, post_id: str, tags: list[str]):
+def sync_tags(post_id: str, tags: list[str]):
     if not tags:
         return
     unique = list(set(tags))
     em = {}
-    try:
-        r = client.table("tags").select("id,name").in_("name", unique).execute()
-        em = {d["name"]: d["id"] for d in r.data}
-    except Exception:
-        pass
+    if unique:
+        placeholders = ", ".join(["%s"] * len(unique))
+        sql = f'SELECT id, name FROM tags WHERE name IN ({placeholders})'
+        rows = execute_sql(sql, tuple(unique))
+        if rows:
+            em = {d["name"]: d["id"] for d in rows}
     new = [n for n in unique if n not in em]
     if new:
-        try:
-            r = client.table("tags").insert([{"name": n, "posts_count": 0} for n in new]).execute()
-            for d in r.data:
-                em[d["name"]] = d["id"]
-        except Exception:
-            pass
+        for name in new:
+            try:
+                result = insert_one("tags", {"name": name, "posts_count": 0}, returning="id")
+                if result:
+                    em[name] = result["id"]
+            except Exception:
+                pass
     for name in unique:
         tid = em.get(name)
         if not tid:
             continue
         try:
-            lk = client.table("post_tags").select("post_id").eq("post_id", post_id).eq("tag_id", tid).execute()
-            if not lk.data:
-                client.table("post_tags").insert({"post_id": post_id, "tag_id": tid}).execute()
+            link = select_one("post_tags", {"post_id": post_id, "tag_id": tid}, columns="post_id")
+            if not link:
+                insert_one("post_tags", {"post_id": post_id, "tag_id": tid})
         except Exception:
             pass
 
@@ -389,15 +390,19 @@ def deduplicate(items: list[dict]) -> list[dict]:
     return result
 
 
-# ────────────────────── 每日帖管理 ──────────────────────
+# ────────────────────── 每日帖管理（直连 PostgreSQL） ──────────────────────
 
-def find_today_post(client, cat_id: str, day_str: str) -> dict | None:
+def find_today_post(cat_id: str, day_str: str) -> dict | None:
     """查找今天的空投日报帖"""
     title_match = f"🪂 加密空投/福利日报 | {day_str}"
-    result = client.table("posts").select("id,title,content").eq(
-        "category_id", cat_id
-    ).eq("title", title_match).order("created_at", desc=True).limit(1).execute()
-    return result.data[0] if result.data else None
+    sql = '''
+        SELECT id, title, content FROM posts 
+        WHERE category_id = %s AND title = %s 
+        ORDER BY created_at DESC 
+        LIMIT 1
+    '''
+    rows = execute_sql(sql, (cat_id, title_match))
+    return rows[0] if rows else None
 
 
 def merge_items(existing: list[dict], new: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -466,15 +471,14 @@ def run(save: bool = False, max_items: int = 20):
             _safe_print(f"  {item['summary'][:200]}")
 
     if save:
-        client = get_client()
-        author = lookup_author(client)
-        cat_id = get_cat_id(client)
+        author = lookup_author()
+        cat_id = get_cat_id()
 
         now_utc = datetime.now(timezone.utc)
         day_str = now_utc.strftime("%Y-%m-%d")
         update_time = now_utc.strftime("%H:%M")
 
-        existing_post = find_today_post(client, cat_id, day_str)
+        existing_post = find_today_post(cat_id, day_str)
 
         if existing_post:
             # 已存在今日日报 → 追加新条目卡片
@@ -519,11 +523,11 @@ def run(save: bool = False, max_items: int = 20):
 
             new_content = new_header + header_end + rest + "\n" + "\n".join(new_cards) + "\n" + split_marker + after
 
-            client.table("posts").update({
+            update_one("posts", {
                 "content": new_content,
                 "is_hot": True,
                 "updated_at": now_utc.isoformat(),
-            }).eq("id", existing_post["id"]).execute()
+            }, {"id": existing_post["id"]})
 
             logger.info(f"[追加] 日报 {existing_post['id'][:8]}... +{len(new_items)} 条 → 共 {card_count} 条")
         else:
@@ -532,7 +536,7 @@ def run(save: bool = False, max_items: int = 20):
             title = build_daily_title(day_str)
             html = build_daily_post_html(items_to_post, day_str, update_time)
 
-            resp = client.table("posts").insert({
+            result = insert_one("posts", {
                 "title": title,
                 "content": html,
                 "author_id": author["id"],
@@ -541,16 +545,16 @@ def run(save: bool = False, max_items: int = 20):
                 "is_hot": True,
                 "created_at": now_utc.isoformat(),
                 "updated_at": now_utc.isoformat(),
-            }).execute()
+            }, returning="id")
 
-            pid = resp.data[0]["id"]
+            pid = result["id"]
             all_tags = list(set(["Airdrop"] + [i["exchange"] for i in items_to_post]))
-            sync_tags(client, pid, all_tags)
+            sync_tags(pid, all_tags)
             logger.info(f"[入库] 日报 id={pid[:8]}... {len(items_to_post)} 条")
 
         # 更新所有标签
         all_tags = list(set(["Airdrop"] + [i["exchange"] for i in all_items]))
-        sync_tags(client, existing_post["id"] if existing_post else pid, all_tags)
+        sync_tags(existing_post["id"] if existing_post else pid, all_tags)
 
     logger.info("=== 完成 ===")
 
