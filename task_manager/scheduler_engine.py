@@ -70,7 +70,7 @@ def import_from_yaml() -> list[dict]:
             "name": job_name,
             "label": _job_label(job_name),
             "cron": cron,
-            "enabled": True,
+            "enabled": False,
             "commands": commands,
             "env_vars": env_vars,
             "working_dir": str(PROJECT_DIR),
@@ -81,18 +81,9 @@ def import_from_yaml() -> list[dict]:
 
 def _job_label(job_name: str) -> str:
     labels = {
-        "collect": "加密货币价格采集",
-        "news": "币安新闻抓取",
-        "fifa": "世界杯赛程抓取",
-        "fifa_blog": "FIFA Blog 文章抓取",
-        "ai_digest": "AI 新闻摘要推送",
-        "bot_posts": "机器人观点发帖",
-        "airdrop": "空投福利信息爬取",
-        "indo_news": "印尼热点新闻抓取",
-        "esports": "印尼电子竞技新闻抓取",
-        "worldcup": "2026 世界杯比分更新",
-        "tg_summary": "Telegram 群消息汇总 Bot",
-        "us_stock": "美股数据采集 & 分钟K线图",
+        "scrape_api": "通用抓取（API/httpx）",
+        "scrape_browser": "浏览器抓取（Playwright）",
+        "us_stock": "美股数据采集 & 分钟K线",
     }
     return labels.get(job_name, job_name)
 
@@ -120,9 +111,19 @@ def _merge_builtin_tasks(tasks: list[dict]) -> None:
             "name": "create_bots",
             "label": "批量创建机器人",
             "cron": "",
-            "enabled": True,
+            "enabled": False,
             "trigger": "manual",
             "commands": ["python task_manager/create_bots.py"],
+            "env_vars": {},
+            "working_dir": str(PROJECT_DIR),
+        },
+        {
+            "name": "clean_all",
+            "label": "⚠️ 清空全部帖子和评论（测试用）",
+            "cron": "",
+            "enabled": False,
+            "trigger": "manual",
+            "commands": ["python tools/clean_all.py --yes"],
             "env_vars": {},
             "working_dir": str(PROJECT_DIR),
         },

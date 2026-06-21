@@ -27,8 +27,8 @@ class TaskManagerApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("定时任务管理面板")
-        self.root.geometry("960x680")
-        self.root.minsize(800, 550)
+        self.root.geometry("1040x680")
+        self.root.minsize(880, 550)
 
         self.scheduler = TaskScheduler(log_callback=self._on_log)
         self._tasks: list[dict] = []
@@ -84,7 +84,7 @@ class TaskManagerApp:
         self.tree.heading("next_run", text="下次运行")
 
         self.tree.column("name", width=60)
-        self.tree.column("label", width=120)
+        self.tree.column("label", width=200)
         self.tree.column("cron", width=120)
         self.tree.column("enabled", width=50, anchor=tk.CENTER)
         self.tree.column("last_run", width=140, anchor=tk.CENTER)
