@@ -301,6 +301,7 @@ def run(save: bool = False, bot_count: int = 5, max_news: int = 15):
                 "content": p["content"],
                 "author_id": p["bot"]["id"],
                 "category_id": cat_id,
+                "post_type": "info",
                 "status": "pending_review",
                 "created_at": now,
                 "updated_at": now,

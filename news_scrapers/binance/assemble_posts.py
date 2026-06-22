@@ -210,6 +210,7 @@ def assemble_posts(news_list: list[dict], author_id: str, category_id: str) -> l
             "content": html_content,
             "author_id": author_id,
             "category_id": category_id,
+            "post_type": "info",
             "status": "pending_review",
             "images": image_list,
             "is_hot": False,

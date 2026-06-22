@@ -29,7 +29,31 @@ PROJECT_DIR = Path(__file__).parent.parent
 load_dotenv(dotenv_path=PROJECT_DIR / ".env")
 
 CONFIG_FILE = PROJECT_DIR / "task_config.json"
-YAML_FILE = PROJECT_DIR / ".github" / "workflows" / "scheduler.yml"
+_YAML_ENABLED = PROJECT_DIR / ".github" / "workflows" / "scheduler.yml"
+_YAML_DISABLED = PROJECT_DIR / ".github" / "workflows" / "scheduler.yml.disabled"
+YAML_FILE = _YAML_ENABLED if _YAML_ENABLED.exists() else _YAML_DISABLED
+
+# 任务分类映射（按项目目录结构）
+TASK_CATEGORIES: dict[str, list[str]] = {
+    "新闻爬虫": ["binance_news", "tokocrypto", "indodax", "pintu", "mobee", "osl", "bitget", "okx"],
+    "AI 生成": ["ai_digest", "bot_posts"],
+    "电子竞技": ["indonesia_esports"],
+    "Indo Street": ["indo_news"],
+    "FIFA 赛事": ["fifa_schedule", "fifa_blog", "worldcup"],
+    "加密市场": ["price_collector", "airdrop"],
+    "美股数据": ["us_stock"],
+    "管理工具": ["create_bots", "clean_all"],
+}
+
+CATEGORY_ORDER = ["新闻爬虫", "AI 生成", "电子竞技", "Indo Street", "FIFA 赛事", "加密市场", "美股数据", "管理工具"]
+
+
+def get_task_category(task_name: str) -> str:
+    """根据任务名返回所属分类"""
+    for cat, names in TASK_CATEGORIES.items():
+        if task_name in names:
+            return cat
+    return "其他"
 
 
 # ──────────────── 配置管理 ────────────────
@@ -65,6 +89,7 @@ def _parse_yaml_jobs(yaml_path: Path) -> list[dict]:
         tasks.append({
             "name": job_name,
             "label": _job_label(job_name),
+            "category": get_task_category(job_name),
             "cron": cron,
             "enabled": False,
             "commands": commands,
@@ -91,10 +116,10 @@ def _job_label(job_name: str) -> str:
         "indodax": "Indodax 博客抓取",
         "pintu": "Pintu 新闻抓取",
         "mobee": "Mobee 新闻抓取",
-        "news": "币安新闻抓取",
+        "binance_news": "币安新闻抓取",
         "fifa_schedule": "FIFA 赛程抓取",
         "fifa_blog": "FIFA Blog 文章抓取",
-        "esports": "印尼电子竞技新闻抓取",
+        "indonesia_esports": "印尼电子竞技新闻抓取",
         "worldcup": "世界杯比分更新",
         "osl": "OSL 公告抓取",
         "bitget": "Bitget 新闻抓取",
@@ -126,6 +151,7 @@ def _merge_builtin_tasks(tasks: list[dict]) -> None:
         {
             "name": "create_bots",
             "label": "批量创建机器人",
+            "category": get_task_category("create_bots"),
             "cron": "",
             "enabled": False,
             "trigger": "manual",
@@ -136,6 +162,7 @@ def _merge_builtin_tasks(tasks: list[dict]) -> None:
         {
             "name": "clean_all",
             "label": "⚠️ 清空全部帖子和评论（测试用）",
+            "category": get_task_category("clean_all"),
             "cron": "",
             "enabled": False,
             "trigger": "manual",
@@ -362,6 +389,21 @@ class TaskScheduler:
             if t["name"] == task_name:
                 threading.Thread(target=self._execute_task, args=(t,), daemon=True).start()
                 return
+
+    def run_category(self, category: str) -> None:
+        """执行某个分类下的全部任务（按顺序串行）"""
+        cat_tasks = [t for t in self._tasks if t.get("category") == category]
+        if not cat_tasks:
+            self._log(None, f"分类 {category} 下没有任务")
+            return
+        self._log(None, f"▶ 开始执行 [{category}] 全部 {len(cat_tasks)} 个任务")
+        threading.Thread(target=self._execute_tasks_sequence, args=(cat_tasks, category), daemon=True).start()
+
+    def _execute_tasks_sequence(self, tasks: list[dict], category: str) -> None:
+        """串行执行任务列表"""
+        for t in tasks:
+            self._execute_task(t)
+        self._log(None, f"✓ [{category}] 全部任务执行完成")
 
     def shutdown(self) -> None:
         if self.scheduler.running:

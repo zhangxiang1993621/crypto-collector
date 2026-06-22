@@ -18,6 +18,7 @@ from tkinter import ttk, messagebox
 
 from task_manager.scheduler_engine import (
     TaskScheduler, load_config, save_config, sync_to_yaml,
+    CATEGORY_ORDER, get_task_category,
 )
 
 
@@ -62,31 +63,31 @@ class TaskManagerApp:
         self.lbl_status = ttk.Label(self.status_bar, text="● 运行中", foreground="green")
         self.lbl_status.pack(side=tk.LEFT, padx=10)
 
-        # 任务表格区域
+        # 任务表格区域（分类树）
         table_frame = ttk.LabelFrame(self.root, text="任务列表", padding=5)
         table_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=5)
 
-        columns = ("name", "label", "cron", "enabled", "last_run", "last_status", "next_run")
+        columns = ("label", "cron", "enabled", "last_run", "last_status", "next_run")
         self.tree = ttk.Treeview(
             table_frame,
             columns=columns,
-            show="headings",
+            show="tree headings",
             selectmode="browse",
             height=8,
         )
 
-        self.tree.heading("name", text="任务名", command=lambda: self._sort_column("name"))
-        self.tree.heading("label", text="描述", command=lambda: self._sort_column("label"))
+        self.tree.heading("#0", text="任务名 / 分类")
+        self.tree.heading("label", text="描述")
         self.tree.heading("cron", text="Cron 表达式")
         self.tree.heading("enabled", text="状态")
-        self.tree.heading("last_run", text="上次运行", command=lambda: self._sort_column("last_run"))
+        self.tree.heading("last_run", text="上次运行")
         self.tree.heading("last_status", text="结果")
         self.tree.heading("next_run", text="下次运行")
 
-        self.tree.column("name", width=60)
+        self.tree.column("#0", width=160, minwidth=140)
         self.tree.column("label", width=200)
-        self.tree.column("cron", width=120)
-        self.tree.column("enabled", width=50, anchor=tk.CENTER)
+        self.tree.column("cron", width=100)
+        self.tree.column("enabled", width=80, anchor=tk.CENTER)
         self.tree.column("last_run", width=140, anchor=tk.CENTER)
         self.tree.column("last_status", width=50, anchor=tk.CENTER)
         self.tree.column("next_run", width=140, anchor=tk.CENTER)
@@ -97,15 +98,19 @@ class TaskManagerApp:
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.tree.bind("<Double-1>", self._on_edit_cron)
+        self.tree.bind("<Double-1>", self._on_double_click)
 
         # 操作按钮行
         btn_frame = ttk.Frame(self.root, padding=5)
         btn_frame.pack(fill=tk.X, padx=8)
 
+        self.btn_run_category = ttk.Button(btn_frame, text="执行分类全部", command=self._run_category)
+        self.btn_run_category.pack(side=tk.LEFT, padx=3)
+
         ttk.Button(btn_frame, text="编辑 Cron", command=self._on_edit_cron).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text="启用 / 停用", command=self._toggle_task).pack(side=tk.LEFT, padx=3)
-        ttk.Button(btn_frame, text="立即执行", command=self._run_now).pack(side=tk.LEFT, padx=3)
+        self.btn_run_one = ttk.Button(btn_frame, text="立即执行", command=self._run_now)
+        self.btn_run_one.pack(side=tk.LEFT, padx=3)
 
         # 日志区域
         log_frame = ttk.LabelFrame(self.root, text="运行日志", padding=3)
@@ -132,51 +137,101 @@ class TaskManagerApp:
         self._refresh_table()
 
     def _refresh_table(self) -> None:
-        """刷新任务表格（仅更新数据，不重建行，保留选中状态）"""
+        """刷新分类树"""
         status_map = self.scheduler.get_status()
 
-        for iid in self.tree.get_children():
-            t = next((t for t in self._tasks if t["name"] == iid), None)
-            if t is None:
-                continue
-            name = t["name"]
-            st = status_map.get(name, {})
-            self.tree.item(iid, values=(
-                name,
-                t["label"],
-                t["cron"],
-                "已启用" if t["enabled"] else "已停用",
-                st.get("last_run", "-"),
-                st.get("last_status", "-"),
-                st.get("next_run", "-") if t["enabled"] else "-",
-            ))
+        # 按分类组织任务
+        grouped: dict[str, list[dict]] = {}
+        for t in self._tasks:
+            cat = t.get("category", "其他")
+            if cat not in grouped:
+                grouped[cat] = []
+            grouped[cat].append(t)
 
-        # 检测是否有新增/删除的任务，有则重建
-        current_ids = set(self.tree.get_children())
-        config_ids = {t["name"] for t in self._tasks}
-        if current_ids != config_ids:
-            selection = self.tree.selection()
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-            for t in self._tasks:
+        for cat_name in CATEGORY_ORDER:
+            if cat_name not in grouped:
+                grouped[cat_name] = []
+
+        # 更新或创建分类节点
+        for cat_name in reversed(CATEGORY_ORDER):
+            cat_tasks = grouped.get(cat_name, [])
+            enabled_count = sum(1 for t in cat_tasks if t["enabled"])
+            total_count = len(cat_tasks)
+
+            if self.tree.exists(cat_name):
+                # 更新现有分类节点
+                self.tree.item(cat_name, values=(
+                    f"{enabled_count}/{total_count} 个任务",
+                    "",
+                    f"已启用 {enabled_count}" if enabled_count else "全部停用",
+                    "", "", ""
+                ), open=self.tree.item(cat_name, "open") if self.tree.get_children(cat_name) else True)
+            else:
+                # 按树顺序插入（新分类放最前面）
+                existing = list(self.tree.get_children(""))
+                insert_idx = 0
+                for i, eid in enumerate(existing):
+                    try:
+                        if CATEGORY_ORDER.index(eid) > CATEGORY_ORDER.index(cat_name):
+                            insert_idx = i + 1
+                    except ValueError:
+                        pass
+                self.tree.insert("", insert_idx, iid=cat_name, text=f"📁 {cat_name}", values=(
+                    f"{enabled_count}/{total_count} 个任务",
+                    "",
+                    f"已启用 {enabled_count}" if enabled_count else "全部停用",
+                    "", "", ""
+                ), open=True, tags=("category",))
+
+        # 更新任务子节点（仅变更检测，避免闪烁）
+        for cat_name in CATEGORY_ORDER:
+            cat_tasks = grouped.get(cat_name, [])
+            existing_children = set(self.tree.get_children(cat_name))
+            config_names = {t["name"] for t in cat_tasks}
+
+            # 删除不再存在的任务
+            for child in existing_children - config_names:
+                self.tree.delete(child)
+
+            # 更新或新增任务
+            for t in cat_tasks:
                 name = t["name"]
                 st = status_map.get(name, {})
-                self.tree.insert("", tk.END, iid=name, values=(
-                    name,
+                vals = (
                     t["label"],
                     t["cron"],
                     "已启用" if t["enabled"] else "已停用",
                     st.get("last_run", "-"),
                     st.get("last_status", "-"),
                     st.get("next_run", "-") if t["enabled"] else "-",
-                ))
-            # 恢复选中
-            for sid in selection:
-                if sid in config_ids:
-                    self.tree.selection_add(sid)
+                )
+                if self.tree.exists(name):
+                    self.tree.item(name, values=vals)
+                else:
+                    self.tree.insert(cat_name, tk.END, iid=name, text=name, values=vals, tags=("task",))
 
         # 每5秒自动刷新
         self.root.after(5000, self._refresh_table)
+
+    # ──────────────── 辅助方法 ────────────────
+
+    def _is_category_selected(self) -> bool:
+        """判断当前选中项是否为分类节点"""
+        sel = self.tree.selection()
+        if not sel:
+            return False
+        iid = sel[0]
+        return iid in CATEGORY_ORDER
+
+    def _get_selected_task(self) -> dict | None:
+        """获取当前选中的任务（跳过分类节点）"""
+        sel = self.tree.selection()
+        if not sel:
+            return None
+        iid = sel[0]
+        if iid in CATEGORY_ORDER:
+            return None
+        return next((t for t in self._tasks if t["name"] == iid), None)
 
     # ──────────────── 操作 ────────────────
 
@@ -191,15 +246,54 @@ class TaskManagerApp:
             self.btn_start.config(text="⏸ 停止调度")
             self.lbl_status.config(text="● 运行中", foreground="green")
 
+    def _on_double_click(self, event=None) -> None:
+        """双击分类：展开/收起；双击任务：编辑 Cron"""
+        sel = self.tree.selection()
+        if not sel:
+            return
+        iid = sel[0]
+        if iid in CATEGORY_ORDER:
+            # 分类节点：切换展开/收起
+            if self.tree.item(iid, "open"):
+                self.tree.item(iid, open=False)
+            else:
+                self.tree.item(iid, open=True)
+        else:
+            self._on_edit_cron()
+
+    def _run_category(self) -> None:
+        """执行选中分类下的全部任务"""
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("提示", "请先选择一个分类")
+            return
+        iid = sel[0]
+        if iid not in CATEGORY_ORDER:
+            # 选中了任务，找到其所属分类
+            task = self._get_selected_task()
+            if task:
+                iid = task.get("category", "")
+            else:
+                messagebox.showwarning("提示", "请选择一个分类节点")
+                return
+
+        cat_tasks = [t for t in self._tasks if t.get("category") == iid]
+        if not cat_tasks:
+            messagebox.showinfo("提示", f"分类「{iid}」下没有任务")
+            return
+
+        if not messagebox.askyesno("确认执行", f"即将执行 [{iid}] 下的全部 {len(cat_tasks)} 个任务，是否继续？"):
+            return
+
+        self._log_callback("系统", f"▶ 手动触发 [{iid}] 全部任务")
+        self.scheduler.run_category(iid)
+
     def _toggle_task(self) -> None:
-        selection = self.tree.selection()
-        if not selection:
-            messagebox.showwarning("提示", "请先选择一个任务")
-            return
-        name = selection[0]
-        task = next((t for t in self._tasks if t["name"] == name), None)
+        task = self._get_selected_task()
         if not task:
+            messagebox.showwarning("提示", "请先选择一个具体任务（不是分类）")
             return
+        name = task["name"]
 
         if task["enabled"]:
             self.scheduler.disable_task(name)
@@ -208,14 +302,11 @@ class TaskManagerApp:
         self._tasks = self.scheduler.get_tasks()
 
     def _on_edit_cron(self, event=None) -> None:
-        selection = self.tree.selection()
-        if not selection:
-            messagebox.showwarning("提示", "请先选择一个任务")
-            return
-        name = selection[0]
-        task = next((t for t in self._tasks if t["name"] == name), None)
+        task = self._get_selected_task()
         if not task:
+            messagebox.showwarning("提示", "请先选择一个具体任务（不是分类）")
             return
+        name = task["name"]
 
         dialog = CronEditDialog(self.root, task["label"], task["cron"])
         self.root.wait_window(dialog)
@@ -225,14 +316,11 @@ class TaskManagerApp:
                 messagebox.showinfo("成功", f"已更新 {task['label']} 的 Cron 为: {dialog.result}")
 
     def _run_now(self) -> None:
-        selection = self.tree.selection()
-        if not selection:
-            messagebox.showwarning("提示", "请先选择一个任务")
-            return
-        name = selection[0]
-        task = next((t for t in self._tasks if t["name"] == name), None)
+        task = self._get_selected_task()
         if not task:
+            messagebox.showwarning("提示", "请先选择一个具体任务（不是分类）")
             return
+        name = task["name"]
 
         self._log_callback(name, "▶ 手动触发")
         self.scheduler.run_now(name)
@@ -272,13 +360,6 @@ class TaskManagerApp:
         self.log_text.insert(tk.END, line, tag)
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
-
-    def _sort_column(self, col: str) -> None:
-        """按列排序（简化版）"""
-        items = [(self.tree.set(item, col), item) for item in self.tree.get_children("")]
-        items.sort(key=lambda x: x[0])
-        for idx, (_, item) in enumerate(items):
-            self.tree.move(item, "", idx)
 
     def _on_close(self) -> None:
         self.scheduler.shutdown()

@@ -6,13 +6,20 @@ on:
   - cron: 0 */2 * * *
   - cron: 0 8 * * *
   - cron: 0 10 * * *
-  - cron: 0 */4 * * *
-  - cron: 30 */2 * * *
-  - cron: 0 */6 * * *
-  - cron: 0 7,19 * * *
   - cron: 0 8,20 * * *
-  - cron: '*/30 * * * *'
-  - cron: 30 21 * * 1-5
+  - cron: 0 8,20 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 8,20 * * *
+  - cron: 30 21 * * * 1-5
+  - cron: 0 12 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 9,21 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 8,20 * * *
+  - cron: 30 21 * * * 1-5
   workflow_dispatch: null
 
 jobs:
@@ -44,6 +51,7 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
       run: python crypto/airdrop_scraper.py --save --max 20 || echo "[FAIL]"
 
@@ -85,8 +93,9 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
-      run: python news_scrapers/indo_news/indo_news_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python indo_news/indo_news_scraper.py --save --max 15 || echo "[FAIL]"
 
   tokocrypto:
     runs-on: ubuntu-latest
@@ -98,6 +107,7 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python news_scrapers/tokocrypto/tokocrypto_scraper.py --save --max 10 || echo "[FAIL]"
 
   indodax:
@@ -110,6 +120,7 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python news_scrapers/indodax/indodax_scraper.py --save --max 15 || echo "[FAIL]"
 
   pintu:
@@ -122,6 +133,7 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         PINTU_CATEGORY_NAME: ${{ vars.PINTU_CATEGORY_NAME }}
       run: python news_scrapers/pintu/pintu_scraper.py --save --max 15 || echo "[FAIL]"
 
@@ -135,10 +147,11 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python news_scrapers/mobee/mobee_scraper.py --save --max 10 || echo "[FAIL]"
 
   # ══════════════ Playwright (Chromium) jobs ══════════════
-  news:
+  binance_news:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -187,7 +200,7 @@ jobs:
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
       run: python fifa/blog/fifa_blog_scraper.py --save --max 30 || echo "[FAIL]"
 
-  esports:
+  indonesia_esports:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -199,8 +212,9 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        ESPers_CATEGORY_NAME: ${{ vars.ESPers_CATEGORY_NAME }}
-      run: python news_scrapers/esports/esports_scraper.py --save --max 10 || echo "[FAIL]"
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        ESPORTS_CATEGORY_NAME: ${{ vars.ESPORTS_CATEGORY_NAME }}
+      run: python esports/esports_scraper.py --save --max 10 || echo "[FAIL]"
 
   worldcup:
     runs-on: ubuntu-latest
@@ -230,6 +244,7 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python news_scrapers/osl/osl_scraper.py --save --max 10 || echo "[FAIL]"
 
   bitget:
@@ -244,6 +259,7 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python news_scrapers/bitget/bitget_scraper.py --save --max 10 || echo "[FAIL]"
 
   okx:
@@ -258,6 +274,7 @@ jobs:
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python news_scrapers/okx/okx_scraper.py --save --max 10 || echo "[FAIL]"
 
   # ══════════════ CloakBrowser (美股) ══════════════

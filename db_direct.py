@@ -104,7 +104,7 @@ def get_connection(autocommit: bool = True):
     import psycopg2
 
     config = _get_db_config()
-    logger.info(f"直连 PostgreSQL: {config['host']}:{config['port']}")
+    logger.debug(f"直连 PostgreSQL: {config['host']}:{config['port']}")
 
     conn = psycopg2.connect(**config)
     if autocommit:

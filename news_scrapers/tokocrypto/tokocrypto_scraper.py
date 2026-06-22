@@ -58,11 +58,12 @@ def get_cat_id() -> str:
 
 
 def get_random_bot() -> dict:
-    rows = select_all("profiles", {"is_bot": True}, columns="id,username")
+    username = os.environ.get("POSTS_AUTHOR_USERNAME") or "indoAdmin"
+    rows = select_all("profiles", {"username": username, "is_bot": True}, columns="id,username")
     if not rows:
-        logger.error("无可用机器人")
+        logger.error("发帖账号 %s 不存在或未设为机器人", username)
         sys.exit(1)
-    return random.choice(rows)
+    return rows[0]
 
 
 def strip_html(text: str) -> str:
@@ -178,9 +179,14 @@ def scrape_tokocrypto(max_items: int = 20) -> list[dict]:
             else:
                 campaign_url = redirect_addr
 
-            detail = fetch_campaign_detail(campaign_url)
-            full_text = detail.get("full_text", "")
-            summary = full_text[:500] if full_text else act["description"]
+            # Zendesk support 页面有反爬，直接用 API 数据
+            if "support.tokocrypto.com" in campaign_url:
+                summary = act["description"]
+                full_text = ""
+            else:
+                detail = fetch_campaign_detail(campaign_url)
+                full_text = detail.get("full_text", "")
+                summary = full_text[:500] if full_text else act["description"]
         else:
             campaign_url = redirect_addr if redirect_addr else ""
             summary = act["description"]
@@ -370,6 +376,7 @@ def run(save: bool = False, max_items: int = 20):
                     "content": content,
                     "author_id": bot["id"],
                     "category_id": cat_id,
+                    "post_type": "info",
                     "status": "pending_review",
                     "created_at": now,
                     "updated_at": now,

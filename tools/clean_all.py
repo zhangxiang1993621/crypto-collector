@@ -74,7 +74,7 @@ def run(dry_run: bool = False, skip_confirm: bool = False) -> None:
     print("=" * 60)
 
     # ── 第 1 步：统计当前数据量 ──
-    print("\n📊 当前数据量：")
+    print("\n[统计] 当前数据量：")
     total_rows = 0
     for name, table, label in DELETE_ORDER:
         count = 0
@@ -97,7 +97,7 @@ def run(dry_run: bool = False, skip_confirm: bool = False) -> None:
         total_rows += count
 
     if total_rows == 0:
-        print("\n✅ 所有表均为空，无需清理。")
+        print("\n[OK] 所有表均为空，无需清理。")
         return
 
     print(f"  {'─' * 36}")
@@ -105,18 +105,18 @@ def run(dry_run: bool = False, skip_confirm: bool = False) -> None:
 
     # ── 第 2 步：确认 ──
     if dry_run:
-        print(f"\n🔍 --dry-run 模式，未执行删除。")
+        print(f"\n[预览] --dry-run 模式，未执行删除。")
         return
 
     if not skip_confirm:
-        print(f"\n⚠️  即将删除以上 {total_rows:,} 行数据！")
+        print(f"\n[警告] 即将删除以上 {total_rows:,} 行数据！")
         answer = input("确认执行？(输入 YES 继续): ").strip()
         if answer != "YES":
             print("已取消。")
             return
 
     # ── 第 3 步：执行删除 ──
-    print("\n🗑️  开始删除...")
+    print("\n[删除] 开始删除...")
     total_deleted = 0
     for name, table, label in DELETE_ORDER:
         if name == "__orphan_tags__":
@@ -128,7 +128,7 @@ def run(dry_run: bool = False, skip_confirm: bool = False) -> None:
 
     print(f"  {'─' * 36}")
     print(f"  {'合计':<20} 已删除 {total_deleted:>8,} 行")
-    print("\n✅ 清空完成。")
+    print("\n[OK] 清空完成。")
 
 
 if __name__ == "__main__":

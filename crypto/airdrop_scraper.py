@@ -35,6 +35,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ────────────────────── 交易所 API / 页面配置 ──────────────────────
+# KASKUS 论坛搜索（印尼最大论坛，搜索 "airdrop"）
+KASKUS_SEARCH_URL = "https://www.kaskus.co.id/api/oauth/forum/search?q=airdrop&sort=newest&page=1&limit=20"
+
+# Gate.io 印尼活动公告
+GATE_API = "https://www.gate.io/articlelist/ann"
+
 # Binance 内部 API（catalogId=48 是最新动态/上币）
 BINANCE_API = (
     "https://www.binance.com/bapi/composite/v1/public/cms/article/catalog/list/query"
@@ -267,6 +273,106 @@ def scrape_bybit() -> list[dict]:
     return items
 
 
+def scrape_kaskus() -> list[dict]:
+    """搜索 KASKUS（印尼最大论坛）中关于 airdrop 的帖子"""
+    logger.info("  [KASKUS] 搜索 airdrop 帖子...")
+    items = []
+
+    try:
+        resp = httpx.get(
+            KASKUS_SEARCH_URL,
+            headers={
+                **get_headers(),
+                "Referer": "https://www.kaskus.co.id/",
+                "Origin": "https://www.kaskus.co.id",
+            },
+            timeout=30,
+        )
+
+        if resp.status_code != 200:
+            logger.warning(f"    KASKUS API 返回 {resp.status_code}")
+            return items
+
+        data = resp.json()
+        threads = data.get("data", []) if isinstance(data, dict) else []
+
+        for t in threads:
+            title = t.get("title", "").strip()
+            if not title:
+                continue
+            thread_id = t.get("id", "") or t.get("thread_id", "")
+            url = f"https://www.kaskus.co.id/thread/{thread_id}" if thread_id else ""
+            content = strip_html(t.get("content_plain_text", "") or t.get("content", "") or "")
+            date_str = t.get("created_at", "") or t.get("postdate", "")
+            if not date_str:
+                date_str = datetime.now().strftime("%Y-%m-%d")
+
+            items.append({
+                "title": title,
+                "url": url,
+                "exchange": "KASKUS",
+                "release_date": date_str[:10] if date_str else "",
+                "summary": truncate(content, 300),
+            })
+    except Exception as e:
+        logger.warning(f"    KASKUS 不可达: {e}")
+
+    logger.info(f"    获取 {len(items)} 条")
+    return items
+
+
+def scrape_gateio() -> list[dict]:
+    """抓取 Gate.io 公告（含印尼活动）"""
+    logger.info("  [Gate.io] 抓取公告...")
+    items = []
+
+    try:
+        resp = httpx.get(
+            GATE_API,
+            headers={
+                **get_headers(),
+                "Referer": "https://www.gate.io/announcements",
+                "Accept-Language": "en-US,en;q=0.9,id;q=0.8",
+            },
+            timeout=30,
+        )
+
+        if resp.status_code != 200:
+            logger.warning(f"    Gate.io API 返回 {resp.status_code}")
+            return items
+
+        data = resp.json()
+        articles = data.get("data", []) if isinstance(data, dict) else data if isinstance(data, list) else []
+
+        for a in articles:
+            title = a.get("title", "").strip()
+            if not title:
+                continue
+
+            # Gate.io ID 活动关键词
+            if not any(kw in title.lower() for kw in ["indonesia", "indonesian", "id", "idr", "jakarta", "airdrop",
+                                                       "giveaway", "listing", "new token", "token sale"]):
+                continue
+
+            aid = a.get("id", "") or a.get("articleId", "")
+            url = f"https://www.gate.io/article/{aid}" if aid else ""
+            summary = strip_html(a.get("summary", "") or a.get("description", "") or "")
+            date_str = a.get("created_at", "") or a.get("publish_time", "") or a.get("date", "")
+
+            items.append({
+                "title": title,
+                "url": url,
+                "exchange": "Gate.io",
+                "release_date": date_str[:10] if date_str else "",
+                "summary": truncate(summary, 300),
+            })
+    except Exception as e:
+        logger.warning(f"    Gate.io 不可达: {e}")
+
+    logger.info(f"    获取 {len(items)} 条")
+    return items
+
+
 # ────────────────────── HTML 构建 ──────────────────────
 
 def build_item_card(item: dict, index: int) -> str:
@@ -438,6 +544,8 @@ def run(save: bool = False, max_items: int = 20):
         "Binance": scrape_binance,
         "Bybit": scrape_bybit,
         "OKX": scrape_okx,
+        "KASKUS": scrape_kaskus,
+        "Gate.io": scrape_gateio,
     }
 
     all_items = []

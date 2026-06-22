@@ -245,6 +245,7 @@ def run(save: bool = False, max_news: int = 10):
             "content": html,
             "author_id": admin["id"],
             "category_id": cat_id,
+            "post_type": "info",
             "status": "pending_review",
             "created_at": now,
             "updated_at": now,

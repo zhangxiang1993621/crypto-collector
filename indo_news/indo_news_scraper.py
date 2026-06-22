@@ -21,7 +21,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from xml.etree import ElementTree
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
@@ -131,11 +131,12 @@ def get_cat_id() -> str:
 
 
 def get_random_bot() -> dict:
-    rows = select_all("profiles", {"is_bot": True}, columns="id,username")
+    username = os.environ.get("POSTS_AUTHOR_USERNAME") or "indoAdmin"
+    rows = select_all("profiles", {"username": username, "is_bot": True}, columns="id,username")
     if not rows:
-        logger.error("无可用机器人")
+        logger.error("发帖账号 %s 不存在或未设为机器人", username)
         sys.exit(1)
-    return random.choice(rows)
+    return rows[0]
 
 
 def strip_html(text: str) -> str:
@@ -466,6 +467,7 @@ def run(save: bool = False, max_items: int = 20):
                     "content": content,
                     "author_id": bot["id"],
                     "category_id": cat_id,
+                    "post_type": "info",
                     "status": "pending_review",
                     "created_at": now,
                     "updated_at": now,

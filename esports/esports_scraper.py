@@ -18,7 +18,7 @@ import logging
 import argparse
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
@@ -55,7 +55,7 @@ API_HEADERS = {
 
 
 def get_cat_id() -> str:
-    name = os.environ.get("ESPers_CATEGORY_NAME", "E-Sports")
+    name = os.environ.get("ESPORTS_CATEGORY_NAME") or "E-Sports"
     row = select_one("categories", {"name": name}, columns="id")
     if not row:
         logger.error(f"未找到分类: {name}")
@@ -374,6 +374,7 @@ def run(save: bool = False, max_items: int = 10):
                         "content": content,
                         "author_id": bot["id"],
                         "category_id": cat_id,
+                        "post_type": "info",
                         "status": "pending_review",
                         "created_at": now_iso,
                         "updated_at": now_iso,
