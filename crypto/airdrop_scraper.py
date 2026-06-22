@@ -649,6 +649,7 @@ def run(save: bool = False, max_items: int = 20):
                 "content": html,
                 "author_id": author["id"],
                 "category_id": cat_id,
+                "post_type": "info",
                 "status": "pending_review",
                 "is_hot": True,
                 "created_at": now_utc.isoformat(),

@@ -11,7 +11,7 @@ import os, sys, random, logging, argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from dotenv import load_dotenv
 from db_direct import select_one, select_all, insert_one, execute_sql
