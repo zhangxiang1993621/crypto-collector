@@ -10,14 +10,14 @@ on:
   - cron: 0 8,20 * * *
   - cron: 0 8,20 * * *
   - cron: 0 8,20 * * *
-  - cron: 30 21 * * * 1-5
+  - cron: 30 21 * * 1-5
   - cron: 0 12 * * *
   - cron: 0 8,20 * * *
   - cron: 0 9,21 * * *
   - cron: 0 8,20 * * *
   - cron: 0 8,20 * * *
   - cron: 0 8,20 * * *
-  - cron: 30 21 * * * 1-5
+  - cron: 30 21 * * 1-5
   workflow_dispatch: null
 
 jobs:
