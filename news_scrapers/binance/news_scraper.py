@@ -9,6 +9,7 @@
 
 import os
 import sys
+import json
 import time
 import base64
 import logging
@@ -389,7 +390,7 @@ def insert_one_post(article: dict, author_id: str, category_id: str,
         "category_id": category_id,
         "post_type": "info",
         "status": "pending_review",
-        "images": image_list,
+        "images": json.dumps(image_list),
         "is_hot": False,
         "is_pinned": False,
     }
