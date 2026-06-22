@@ -95,7 +95,7 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
-      run: python indo_news/indo_news_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python news_scrapers/indo_news/indo_news_scraper.py --save --max 15 || echo "[FAIL]"
 
   tokocrypto:
     runs-on: ubuntu-latest
@@ -108,7 +108,7 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python news_scrapers/tokocrypto/tokocrypto_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/tokocrypto/tokocrypto_scraper.py --save --max 10 || echo "[FAIL]"
 
   indodax:
     runs-on: ubuntu-latest
@@ -121,7 +121,7 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python news_scrapers/indodax/indodax_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python crypto/indodax/indodax_scraper.py --save --max 15 || echo "[FAIL]"
 
   pintu:
     runs-on: ubuntu-latest
@@ -135,7 +135,7 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         PINTU_CATEGORY_NAME: ${{ vars.PINTU_CATEGORY_NAME }}
-      run: python news_scrapers/pintu/pintu_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python crypto/pintu/pintu_scraper.py --save --max 15 || echo "[FAIL]"
 
   mobee:
     runs-on: ubuntu-latest
@@ -148,7 +148,7 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python news_scrapers/mobee/mobee_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/mobee/mobee_scraper.py --save --max 10 || echo "[FAIL]"
 
   # ══════════════ Playwright (Chromium) jobs ══════════════
   binance_news:
@@ -245,7 +245,7 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python news_scrapers/osl/osl_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/osl/osl_scraper.py --save --max 10 || echo "[FAIL]"
 
   bitget:
     runs-on: ubuntu-latest
@@ -260,7 +260,7 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python news_scrapers/bitget/bitget_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/bitget/bitget_scraper.py --save --max 10 || echo "[FAIL]"
 
   okx:
     runs-on: ubuntu-latest
@@ -275,7 +275,7 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python news_scrapers/okx/okx_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/okx/okx_scraper.py --save --max 10 || echo "[FAIL]"
 
   # ══════════════ CloakBrowser (美股) ══════════════
   us_stock:

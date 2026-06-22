@@ -12,7 +12,7 @@ import os, sys, re, random, logging, argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
@@ -29,7 +29,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 
 
 def get_cat_id() -> str:
-    name = os.environ.get("MOBEE_CATEGORY_NAME") or "news"
+    name = os.environ.get("MOBEE_CATEGORY_NAME") or "Hot Tokens"
     row = select_one("categories", {"name": name}, columns="id")
     if not row:
         logger.error(f"未找到分类: {name}")

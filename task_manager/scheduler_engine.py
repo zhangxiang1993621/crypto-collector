@@ -35,12 +35,12 @@ YAML_FILE = _YAML_ENABLED if _YAML_ENABLED.exists() else _YAML_DISABLED
 
 # 任务分类映射（按项目目录结构）
 TASK_CATEGORIES: dict[str, list[str]] = {
-    "新闻爬虫": ["binance_news", "tokocrypto", "indodax", "pintu", "mobee", "osl", "bitget", "okx"],
+    "新闻爬虫": ["binance_news"],
     "AI 生成": ["ai_digest", "bot_posts"],
     "电子竞技": ["indonesia_esports"],
     "Indo Street": ["indo_news"],
     "FIFA 赛事": ["fifa_schedule", "fifa_blog", "worldcup"],
-    "加密市场": ["price_collector", "airdrop"],
+    "加密市场": ["price_collector", "airdrop", "tokocrypto", "indodax", "pintu", "mobee", "osl", "bitget", "okx"],
     "美股数据": ["us_stock"],
     "管理工具": ["create_bots", "clean_all"],
 }

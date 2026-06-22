@@ -22,7 +22,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 from dotenv import load_dotenv
@@ -49,7 +49,7 @@ HEADERS = {
 
 
 def get_cat_id() -> str:
-    name = os.environ.get("TOKOCRYPTO_CATEGORY_NAME") or "news"
+    name = os.environ.get("TOKOCRYPTO_CATEGORY_NAME") or "Hot Tokens"
     row = select_one("categories", {"name": name}, columns="id")
     if not row:
         logger.error(f"未找到分类: {name}")

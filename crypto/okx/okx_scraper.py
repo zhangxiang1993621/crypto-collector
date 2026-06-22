@@ -11,7 +11,7 @@ import os, sys, random, logging, argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 from db_direct import select_one, select_all, insert_one, execute_sql
@@ -26,7 +26,7 @@ ANNOUNCE_URL = "https://www.okx.com/id/help/announcements"
 
 
 def get_cat_id() -> str:
-    name = os.environ.get("OKX_CATEGORY_NAME") or "news"
+    name = os.environ.get("OKX_CATEGORY_NAME") or "Hot Tokens"
     row = select_one("categories", {"name": name}, columns="id")
     if not row:
         logger.error(f"未找到分类: {name}")
