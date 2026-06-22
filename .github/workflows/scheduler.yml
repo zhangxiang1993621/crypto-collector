@@ -10,8 +10,6 @@ on:
   - cron: 0 8,20 * * *
   - cron: 0 8,20 * * *
   - cron: 0 8,20 * * *
-  - cron: 0 8,20 * * *
-  - cron: 0 8,20 * * *
   - cron: 30 21 * * * 1-5
   - cron: 0 12 * * *
   - cron: 0 8,20 * * *
@@ -54,34 +52,6 @@ jobs:
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
       run: python crypto/airdrop_scraper.py --save --max 20 || echo "[FAIL]"
-
-  ai_digest:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-    - {uses: actions/checkout@v4}
-    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
-    - {run: pip install -r requirements.txt}
-    - name: Run
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
-      run: python news_scrapers/ai_digest/ai_digest.py --save --max 10 || echo "[FAIL]"
-
-  bot_posts:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-    - {uses: actions/checkout@v4}
-    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
-    - {run: pip install -r requirements.txt}
-    - name: Run
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
-      run: python news_scrapers/ai_digest/bot_posts.py --save --bots 5 || echo "[FAIL]"
 
   indo_news:
     runs-on: ubuntu-latest
