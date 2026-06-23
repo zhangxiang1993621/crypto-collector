@@ -18,6 +18,7 @@ on:
   - cron: 0 8,20 * * *
   - cron: 0 8,20 * * *
   - cron: 30 21 * * 1-5
+  - cron: 0 8 * * *
   workflow_dispatch: null
 
 jobs:
@@ -201,6 +202,22 @@ jobs:
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python sport/worldcup/worldcup_scraper.py --save --today --max 20 || echo "[FAIL]"
+
+  goal:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+      run: python sport/goal/goal_scraper.py --save --max 15 || echo "[FAIL]"
 
   osl:
     runs-on: ubuntu-latest
