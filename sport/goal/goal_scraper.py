@@ -297,6 +297,7 @@ def upsert_post(title: str, content: str, author_id: str,
         logger.info(f"[\u65b0\u5efa] {title[:60]}")
 
     sync_tag(post_id, "Piala Dunia FIFA 2026")
+    sync_tag(post_id, "Skor Langsung")
     return post_id
 
 
