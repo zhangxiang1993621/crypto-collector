@@ -415,7 +415,7 @@ def run(save_to_db: bool = False, max_articles: int = 50, output_file: str | Non
 
         # 合并列表页标签和详情页标签，追加 FIFA 默认标签
         all_tags = list(set(article.get("tags", []) + detail.get("tags", [])))
-        all_tags.extend(["FWC26", "WorldCup"])
+        all_tags.extend(["Piala Dunia FIFA 2026"])
 
         # 下载图片
         hero_b64 = None

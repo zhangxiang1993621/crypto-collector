@@ -254,15 +254,33 @@ def build_match_title(match: dict) -> str:
 
 # ---- 入库逻辑 ----
 
+def sync_tag(post_id: str, tag_name: str) -> None:
+    row = select_one("tags", {"name": tag_name}, columns="id,name")
+    if row:
+        tag_id = row["id"]
+    else:
+        result = insert_one("tags", {"name": tag_name}, returning="id")
+        tag_id = result["id"]
+        logger.info(f"[Tag] Tag baru dibuat: {tag_name}")
+
+    rel = select_one("post_tags", {"post_id": post_id, "tag_id": tag_id}, columns="post_id")
+    if not rel:
+        insert_one("post_tags", {"post_id": post_id, "tag_id": tag_id})
+
+    rows = select_all("post_tags", {"tag_id": tag_id}, columns="*")
+    count = len(rows) if rows else 1
+    update_one("tags", {"posts_count": count}, {"id": tag_id})
+
+
 def upsert_post(title: str, content: str, author_id: str,
                 category_id: str, match_id: str) -> str | None:
     now = datetime.now(timezone.utc).isoformat()
 
     existing = select_one("posts", {"title": title}, columns="id")
     if existing:
-        update_one("posts", {"content": content, "updated_at": now}, {"id": existing["id"]})
+        post_id = existing["id"]
+        update_one("posts", {"content": content, "updated_at": now}, {"id": post_id})
         logger.info(f"[\u66f4\u65b0] {title[:60]}")
-        return existing["id"]
     else:
         result = insert_one("posts", {
             "title": title,
@@ -277,7 +295,9 @@ def upsert_post(title: str, content: str, author_id: str,
         }, returning="id")
         post_id = result["id"]
         logger.info(f"[\u65b0\u5efa] {title[:60]}")
-        return post_id
+
+    sync_tag(post_id, "Piala Dunia FIFA 2026")
+    return post_id
 
 
 # ---- 主流程 ----
