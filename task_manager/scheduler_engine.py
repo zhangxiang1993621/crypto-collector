@@ -116,7 +116,7 @@ def _job_label(job_name: str) -> str:
         "pintu": "Pintu 新闻抓取",
         "mobee": "Mobee 新闻抓取",
         "binance_news": "币安新闻抓取",
-        "fifa_schedule": "体育赛程抓取",
+        "fifa_schedule": "Jadwal Piala Dunia FIFA",
         "fifa_blog": "体育 Blog 文章抓取",
         "indonesia_esports": "印尼电子竞技新闻抓取",
         "goal": "世界杯比分实时抓取",

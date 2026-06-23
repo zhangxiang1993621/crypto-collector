@@ -1,14 +1,14 @@
-"""FIFA 2026 世界杯赛程抓取 + 入库脚本
+"""FIFA 2026 Piala Dunia - Pengambil Jadwal + Skrip Penyimpanan
 
-功能：从 FIFA 官方页面抓取 2026 世界杯赛程，存入 Supabase posts 表
-用法：
-    python fifa_scraper.py                  # 仅抓取并打印
-    python fifa_scraper.py --save           # 抓取并直接入库
-    python fifa_scraper.py --save --output backup.json  # 入库 + 额外存 JSON
+Fungsi: Mengambil jadwal Piala Dunia 2026 dari halaman resmi FIFA, menyimpan ke tabel posts Supabase
+Penggunaan:
+    python sport/schedule/fifa_scraper.py                  # Hanya ambil & cetak
+    python sport/schedule/fifa_scraper.py --save           # Ambil & simpan langsung
 """
 
 import os
 import sys
+import re
 import json
 import logging
 import argparse
@@ -18,8 +18,7 @@ from datetime import datetime, timezone
 import httpx
 from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-# 直连数据库（绕过 REST API 作业限制）
-from db_direct import select_one, select_all, insert_one, upsert_one, update_one, execute_sql
+from db_direct import select_one, select_all, insert_one, update_one
 from playwright.sync_api import sync_playwright
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -32,18 +31,75 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 FIFA_API = "https://fifaworldcup26.hospitality.fifa.com/next-api/matches-all?productCode=26FWC&productType=5"
-FIFA_PAGE = "https://fifaworldcup26.hospitality.fifa.com/us/en/choose-matches?scheduleView=true"
+FIFA_PAGE = "https://fifaworldcup26.hospitality.fifa.com/id/id/choose-matches?scheduleView=true"
+
+# 印尼语月份映射
+BULAN_ID = {
+    "January": "Januari", "February": "Februari", "March": "Maret",
+    "April": "April", "May": "Mei", "June": "Juni",
+    "July": "Juli", "August": "Agustus", "September": "September",
+    "October": "Oktober", "November": "November", "December": "Desember",
+}
+
+# 印尼语星期映射
+HARI_ID = {
+    "Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu",
+    "Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu", "Sunday": "Minggu",
+}
+
+# 印尼语国家名称映射
+NEGARA_ID = {
+    "Algeria": "Aljazair", "Argentina": "Argentina", "Australia": "Australia",
+    "Austria": "Austria", "Belgium": "Belgia",
+    "Bosnia and Herzegovina": "Bosnia dan Herzegovina",
+    "Brazil": "Brasil", "Cabo Verde": "Tanjung Verde", "Canada": "Kanada",
+    "Curacao": "Curacao", "Czechia": "Ceko", "Ecuador": "Ekuador",
+    "Egypt": "Mesir", "France": "Prancis", "Germany": "Jerman",
+    "Haiti": "Haiti", "Iran": "Iran", "Iraq": "Irak",
+    "Ivory Coast": "Pantai Gading", "Japan": "Jepang",
+    "Jordan": "Yordania", "Korea Republic": "Korea Selatan",
+    "Mexico": "Meksiko", "Morocco": "Maroko", "Netherlands": "Belanda",
+    "New Zealand": "Selandia Baru", "Norway": "Norwegia",
+    "Paraguay": "Paraguay", "Qatar": "Qatar",
+    "Republic of Korea": "Korea Selatan", "Saudi Arabia": "Arab Saudi",
+    "Scotland": "Skotlandia", "Senegal": "Senegal",
+    "South Africa": "Afrika Selatan", "Spain": "Spanyol",
+    "Sweden": "Swedia", "Switzerland": "Swiss",
+    "Tunisia": "Tunisia", "Turkiye": "Turkiye",
+    "Uruguay": "Uruguay", "USA": "Amerika Serikat",
+}
 
 
-# ────────────────────── 数据库工具（直连 PostgreSQL） ──────────────────────
+def _ke_id(teks: str) -> str:
+    """将英文球队名转为印尼语"""
+    return NEGARA_ID.get(teks, teks)
+
+
+def _tanggal_id(match_date: str) -> str:
+    """将 'June 24' 转为 '24 Juni'"""
+    for en, id_ in BULAN_ID.items():
+        if en in match_date:
+            return match_date.replace(en, id_)
+    return match_date
+
+
+def _waktu_id(match_time: str) -> str:
+    """将 'Wednesday, 7pm CT' 转为 'Rabu, 7pm CT'"""
+    for en, id_ in HARI_ID.items():
+        if en in match_time:
+            return match_time.replace(en, id_)
+    return match_time
+
+
+# ────────────────────── Alat Database ──────────────────────
 
 def lookup_author_id() -> str:
     username = os.environ.get("POSTS_AUTHOR_USERNAME", "indoAdmin")
     row = select_one("profiles", {"username": username}, columns="id,username")
     if not row:
-        logger.error(f"未找到作者: {username}")
+        logger.error(f"Author tidak ditemukan: {username}")
         sys.exit(1)
-    logger.info(f"作者: {row['username']} (id={row['id']})")
+    logger.info(f"Author: {row['username']} (id={row['id']})")
     return row["id"]
 
 
@@ -51,22 +107,21 @@ def lookup_category_id() -> str:
     name = os.environ.get("FIFA_CATEGORY_NAME") or "Sports Talk"
     row = select_one("categories", {"name": name}, columns="id,name")
     if not row:
-        logger.error(f"未找到分类: {name}")
+        logger.error(f"Kategori tidak ditemukan: {name}")
         sys.exit(1)
-    logger.info(f"分类: {row['name']} (id={row['id']})")
+    logger.info(f"Kategori: {row['name']} (id={row['id']})")
     return row["id"]
 
 
 def upsert_post(title: str, content: str, author_id: str,
                 category_id: str, tag_name: str) -> str:
-    """检查标题是否存在 → 存在则更新，否则新增 → 同步标签"""
     row = select_one("posts", {"title": title}, columns="id")
     now = datetime.now(timezone.utc).isoformat()
 
     if row:
         post_id = row["id"]
         update_one("posts", {"content": content, "updated_at": now}, {"id": post_id})
-        logger.info(f"[更新] 帖子已存在，更新内容: {title}")
+        logger.info(f"[Update] Postingan sudah ada, konten diperbarui: {title}")
     else:
         result = insert_one("posts", {
             "title": title,
@@ -78,50 +133,44 @@ def upsert_post(title: str, content: str, author_id: str,
             "updated_at": now,
         }, returning="id")
         post_id = result["id"]
-        logger.info(f"[新增] 创建帖子: {title}")
+        logger.info(f"[Baru] Postingan dibuat: {title}")
 
-    # 同步标签
     sync_tag(post_id, tag_name)
     return post_id
 
 
 def sync_tag(post_id: str, tag_name: str) -> None:
-    """查找或创建标签，建立 post_tags 关联"""
-    # 查 tag
     row = select_one("tags", {"name": tag_name}, columns="id,name")
     if row:
         tag_id = row["id"]
     else:
         result = insert_one("tags", {"name": tag_name}, returning="id")
         tag_id = result["id"]
-        logger.info(f"[Tag] 创建新标签: {tag_name}")
+        logger.info(f"[Tag] Tag baru dibuat: {tag_name}")
 
-    # 查 post_tags 关联
     rel = select_one("post_tags", {"post_id": post_id, "tag_id": tag_id}, columns="post_id")
     if not rel:
         insert_one("post_tags", {"post_id": post_id, "tag_id": tag_id})
 
-    # 更新 posts_count
     rows = select_all("post_tags", {"tag_id": tag_id}, columns="*")
     count = len(rows) if rows else 1
     update_one("tags", {"posts_count": count}, {"id": tag_id})
 
 
-# ────────────────────── 数据抓取 ──────────────────────
+# ────────────────────── Pengambilan Data ──────────────────────
 
 def fetch_matches_from_api() -> list[dict]:
-    """从 FIFA API 获取所有比赛数据"""
-    logger.info("正在从 FIFA API 获取比赛数据...")
+    logger.info("Mengambil data pertandingan dari FIFA API...")
     r = httpx.get(FIFA_API, timeout=30)
     r.raise_for_status()
     data = r.json()
-    logger.info(f"获取到 {len(data)} 场比赛")
+    logger.info(f"Diperoleh {len(data)} pertandingan")
     return data
 
 
 def fetch_group_mapping() -> dict[int, str]:
-    """从页面抓取 MatchNumber → Group 映射（小组赛才有分组）"""
-    logger.info("正在从页面抓取分组信息...")
+    """从页面抓取 MatchNumber → Grup 映射"""
+    logger.info("Mengambil informasi grup dari halaman...")
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
@@ -141,7 +190,7 @@ def fetch_group_mapping() -> dict[int, str]:
                 const infoEl = el.querySelector('.schedule-view-tile__info-container');
                 if (!infoEl) return;
                 const text = infoEl.textContent.trim();
-                const groupMatch = text.match(/Group\\s+([A-L])\\b/i);
+                const groupMatch = text.match(/Group\\s+([A-L])\\b/i) || text.match(/Grup\\s+([A-L])\\b/i);
                 const numMatch = text.match(/\\bM(\\d+)/);
                 if (groupMatch && numMatch) {
                     mapping[parseInt(numMatch[1])] = groupMatch[1];
@@ -151,40 +200,38 @@ def fetch_group_mapping() -> dict[int, str]:
         }""")
 
         browser.close()
-    logger.info(f"获取到 {len(mapping)} 场比赛的分组信息")
+    logger.info(f"Diperoleh {len(mapping)} pemetaan grup")
     return mapping
 
 
-# ────────────────────── HTML 构建 ──────────────────────
+# ────────────────────── Pembuatan HTML ──────────────────────
 
 def build_html_schedule(matches: list[dict]) -> str:
-    """将比赛列表构建为 HTML 富文本表格，按组排列"""
-    # 按组分组
     groups: dict[str, list[dict]] = {}
     for m in matches:
-        g = m.get("group", "淘汰赛")
+        g = m.get("group", "Babak Gugur")
         groups.setdefault(g, []).append(m)
 
-    sorted_groups = sorted([g for g in groups if g != "淘汰赛"]) + (["淘汰赛"] if "淘汰赛" in groups else [])
+    sorted_groups = sorted([g for g in groups if g != "Babak Gugur"]) + (["Babak Gugur"] if "Babak Gugur" in groups else [])
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     html_parts = [
-        '<h2>美加墨世界杯小组赛赛程安排</h2>',
-        f'<p style="color:#666;font-size:14px">更新时间：{now_str} (UTC) | 数据来源：FIFA 官方</p>',
+        '<h2>Jadwal Grup Piala Dunia FIFA 2026</h2>',
+        f'<p style="color:#666;font-size:14px">Diperbarui: {now_str} (UTC) | Sumber: FIFA Official</p>',
         '<hr>',
     ]
 
     for g_name in sorted_groups:
         group_matches = groups[g_name]
-        html_parts.append(f'<h3 style="margin-top:24px">{g_name} 组</h3>')
+        html_parts.append(f'<h3 style="margin-top:24px">Grup {g_name}</h3>')
         html_parts.append('<table style="width:100%;border-collapse:collapse;font-size:14px">')
         html_parts.append('<tr style="background:#f0f0f0">'
-                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">日期</th>'
-                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">时间</th>'
-                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">主队</th>'
+                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">Tanggal</th>'
+                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">Waktu</th>'
+                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">Tim Tuan Rumah</th>'
                           '<th style="padding:8px;text-align:center;border:1px solid #ddd">VS</th>'
-                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">客队</th>'
-                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">场馆</th>'
+                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">Tim Tamu</th>'
+                          '<th style="padding:8px;text-align:left;border:1px solid #ddd">Stadion</th>'
                           '</tr>')
         for m in group_matches:
             html_parts.append('<tr>'
@@ -198,17 +245,16 @@ def build_html_schedule(matches: list[dict]) -> str:
         html_parts.append('</table>')
 
     html_parts.append('<hr>')
-    html_parts.append('<p style="font-size:12px;color:#999">赛后将更新淘汰赛赛程，敬请关注。</p>')
+    html_parts.append('<p style="font-size:12px;color:#999">Jadwal babak gugur akan diperbarui setelah fase grup selesai.</p>')
     return '\n'.join(html_parts)
 
 
-# ────────────────────── 主流程 ──────────────────────
+# ────────────────────── Alur Utama ──────────────────────
 
 def run(save_to_db: bool = False) -> list[dict]:
     api_matches = fetch_matches_from_api()
     group_map = fetch_group_mapping()
 
-    # 合并数据：只取小组赛
     result = []
     for m in api_matches:
         if m["Stage"] != "GROUP STAGE MATCHES":
@@ -216,17 +262,17 @@ def run(save_to_db: bool = False) -> list[dict]:
         mn = m["MatchNumber"]
         result.append({
             "match_number": mn,
-            "host_team": m["HostTeam"]["ExternalName"],
-            "away_team": m["OpposingTeam"]["ExternalName"],
+            "host_team": _ke_id(m["HostTeam"]["ExternalName"]),
+            "away_team": _ke_id(m["OpposingTeam"]["ExternalName"]),
             "venue": f"{m['Venue']['Name']} ({m['Venue']['Town']}, {m['Venue']['Country']})",
-            "match_date": m["MatchDate"],
-            "match_time": m["MatchDayTime"],
+            "match_date": _tanggal_id(m["MatchDate"]),
+            "match_time": _waktu_id(m["MatchDayTime"]),
             "group": group_map.get(mn, ""),
         })
 
-    logger.info(f"小组赛共 {len(result)} 场")
+    logger.info(f"Total pertandingan grup: {len(result)}")
 
-    # 通过已知分组的比赛推导队伍→组映射，修复缺失分组
+    # 推导缺失的分组
     team_group = {}
     for m in result:
         if m["group"]:
@@ -240,25 +286,25 @@ def run(save_to_db: bool = False) -> list[dict]:
                 m["group"] = g
                 fixed += 1
     if fixed:
-        logger.info(f"推导修复 {fixed} 场缺失分组")
+        logger.info(f"Grup dipulihkan untuk {fixed} pertandingan")
 
     if save_to_db:
         author_id = lookup_author_id()
         category_id = lookup_category_id()
         html = build_html_schedule(result)
-        upsert_post("美加墨世界杯小组赛赛程安排", html, author_id, category_id, "美加墨世界杯")
+        upsert_post("Jadwal Grup Piala Dunia FIFA 2026", html, author_id, category_id, "Piala Dunia FIFA 2026")
 
     return result
 
 
 def main():
-    parser = argparse.ArgumentParser(description="FIFA 2026 世界杯赛程抓取")
-    parser.add_argument("--save", action="store_true", help="直接入库")
+    parser = argparse.ArgumentParser(description="FIFA 2026 Piala Dunia - Pengambil Jadwal")
+    parser.add_argument("--save", action="store_true", help="Simpan ke database")
     args = parser.parse_args()
 
-    logger.info("=== FIFA 2026 世界杯赛程抓取 ===")
+    logger.info("=== Pengambil Jadwal Piala Dunia FIFA 2026 ===")
     run(save_to_db=args.save)
-    logger.info("=== 抓取完成 ===")
+    logger.info("=== Selesai ===")
 
 
 if __name__ == "__main__":
