@@ -152,7 +152,7 @@ jobs:
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python fifa/schedule/fifa_scraper.py --save || echo "[FAIL]"
+      run: python sport/schedule/fifa_scraper.py --save || echo "[FAIL]"
 
   fifa_blog:
     runs-on: ubuntu-latest
@@ -168,7 +168,7 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python fifa/blog/fifa_blog_scraper.py --save --max 30 || echo "[FAIL]"
+      run: python sport/blog/fifa_blog_scraper.py --save --max 30 || echo "[FAIL]"
 
   indonesia_esports:
     runs-on: ubuntu-latest
@@ -200,7 +200,7 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python fifa/worldcup/worldcup_scraper.py --save --today --max 20 || echo "[FAIL]"
+      run: python sport/worldcup/worldcup_scraper.py --save --today --max 20 || echo "[FAIL]"
 
   osl:
     runs-on: ubuntu-latest

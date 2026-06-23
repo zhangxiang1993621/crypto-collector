@@ -38,13 +38,13 @@ TASK_CATEGORIES: dict[str, list[str]] = {
     "新闻爬虫": ["binance_news", "indo_news"],
     "AI 生成": [],  # 暂未启用
     "电子竞技": ["indonesia_esports"],
-    "FIFA 赛事": ["fifa_schedule", "fifa_blog", "worldcup"],
+    "体育": ["fifa_schedule", "fifa_blog", "worldcup"],
     "加密市场": ["price_collector", "airdrop", "tokocrypto", "indodax", "pintu", "mobee", "osl", "bitget", "okx"],
     "美股数据": ["us_stock"],
     "管理工具": ["create_bots", "clean_all"],
 }
 
-CATEGORY_ORDER = ["新闻爬虫", "AI 生成", "电子竞技", "Indo Street", "FIFA 赛事", "加密市场", "美股数据", "管理工具"]
+CATEGORY_ORDER = ["新闻爬虫", "AI 生成", "电子竞技", "Indo Street", "体育", "加密市场", "美股数据", "管理工具"]
 
 
 def get_task_category(task_name: str) -> str:
@@ -116,8 +116,8 @@ def _job_label(job_name: str) -> str:
         "pintu": "Pintu 新闻抓取",
         "mobee": "Mobee 新闻抓取",
         "binance_news": "币安新闻抓取",
-        "fifa_schedule": "FIFA 赛程抓取",
-        "fifa_blog": "FIFA Blog 文章抓取",
+        "fifa_schedule": "体育赛程抓取",
+        "fifa_blog": "体育 Blog 文章抓取",
         "indonesia_esports": "印尼电子竞技新闻抓取",
         "worldcup": "世界杯比分更新",
         "osl": "OSL 公告抓取",
