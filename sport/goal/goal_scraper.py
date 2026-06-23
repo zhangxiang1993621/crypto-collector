@@ -1,22 +1,17 @@
-"""Goal.com Indonesia 体育新闻抓取 + 入库脚本
+"""Goal.com 世界杯 2026 比分抓取 + 入库脚本
 
-功能：从 Goal.com/id 抓取印尼语体育新闻/赛程，存入 Supabase posts 表
-- 抓取首页文章列表
-- 逐篇访问详情页提取标题、内容、图片
-- 图片下载为 base64 内嵌
-- 标题去重，避免重复入库
+功能：从 Goal.com 抓取 2026 世界杯每场比赛的比分（已结束 + 进行中），存入 Supabase posts 表。
+数据来源：Goal.com Next.js SSR 页面中的 __NEXT_DATA__ JSON + Live Scores API
 
 用法：
     python sport/goal/goal_scraper.py                  # 仅抓取打印
     python sport/goal/goal_scraper.py --save           # 抓取并直接入库
-    python sport/goal/goal_scraper.py --save --max 10  # 限制篇数
+    python sport/goal/goal_scraper.py --save --live    # 同时检查实时比分 API 更新
 """
 
 import os
 import sys
 import json
-import time
-import base64
 import logging
 import argparse
 from pathlib import Path
@@ -26,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import httpx
 from dotenv import load_dotenv
-from db_direct import select_one, select_all, insert_one, update_one, execute_sql
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+from db_direct import select_one, select_all, insert_one, upsert_one, update_one
+from playwright.sync_api import sync_playwright
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
@@ -38,20 +33,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://www.goal.com"
-ID_BASE = f"{BASE_URL}/id"
-NEWS_URL = f"{ID_BASE}/berita"
+PAGE_URL = "https://www.goal.com/en-in/world-cup/fixtures-results/70excpe1synn9kadnbppahdn7"
+LIVE_SCORES_URL = "https://www.goal.com/api/live-scores/refresh"
+COMPETITION_ID = "70excpe1synn9kadnbppahdn7"
+
+STATUS_LABELS: dict[str, str] = {
+    "RESULT": "FT",
+    "LIVE": "LIVE",
+    "FIXTURE": "Upcoming",
+    "SCHEDULED": "Upcoming",
+    "POSTPONED": "PP",
+    "CANCELLED": "Cancelled",
+}
+
+STATUS_EMOJI: dict[str, str] = {
+    "RESULT": "\u23f0",
+    "LIVE": "\U0001F534",
+    "FIXTURE": "\U0001F5D3\uFE0F",
+    "SCHEDULED": "\U0001F5D3\uFE0F",
+}
 
 
-# ────────────────────── 数据库工具 ──────────────────────
+# ---- 数据库工具 ----
 
 def lookup_author_id() -> str:
     username = os.environ.get("POSTS_AUTHOR_USERNAME", "indoAdmin")
     row = select_one("profiles", {"username": username}, columns="id,username")
     if not row:
-        logger.error(f"未找到作者: {username}")
+        logger.error(f"\u672a\u627e\u5230\u4f5c\u8005: {username}")
         sys.exit(1)
-    logger.info(f"作者: {username} (id={row['id']})")
+    logger.info(f"\u4f5c\u8005: {row['username']} (id={row['id']})")
     return row["id"]
 
 
@@ -59,348 +70,305 @@ def lookup_category_id() -> str:
     name = os.environ.get("FIFA_CATEGORY_NAME") or "Sports Talk"
     row = select_one("categories", {"name": name}, columns="id,name")
     if not row:
-        logger.error(f"未找到分类: {name}")
+        logger.error(f"\u672a\u627e\u5230\u5206\u7c7b: {name}")
         sys.exit(1)
-    logger.info(f"分类: {name} (id={row['id']})")
+    logger.info(f"\u5206\u7c7b: {row['name']} (id={row['id']})")
     return row["id"]
 
 
-def load_existing_titles() -> set[str]:
-    rows = select_all("posts", {}, columns="title")
-    titles = {r["title"] for r in rows}
-    logger.info(f"数据库中已有 {len(titles)} 条帖子")
-    return titles
+def load_existing_posts() -> dict[str, str]:
+    rows = select_all("posts", {}, columns="id,title")
+    result = {r["title"]: r["id"] for r in rows}
+    logger.info(f"\u6570\u636e\u5e93\u4e2d\u5df2\u6709 {len(result)} \u6761\u5e16\u5b50")
+    return result
 
 
-def download_image_as_base64(img_url: str) -> dict | None:
-    """下载图片并转为 base64 data URI"""
-    if not img_url:
-        return None
-    try:
-        r = httpx.get(img_url, timeout=30)
-        r.raise_for_status()
-        content_type = r.headers.get("content-type", "image/jpeg")
-        b64 = base64.b64encode(r.content).decode()
-        return {"url": f"data:{content_type};base64,{b64}", "alt": "", "width": 640}
-    except Exception as e:
-        logger.warning(f"图片下载失败: {img_url} - {e}")
-        return None
+# ---- 数据抓取 ----
 
-
-def insert_post(title: str, content: str, author_id: str,
-                category_id: str, images: list | None = None,
-                tags: list[str] | None = None) -> str | None:
-    """插入帖子，标题去重"""
-    existing = select_one("posts", {"title": title}, columns="id")
-    if existing:
-        logger.info(f"[跳过] 标题已存在: {title}")
-        return None
-
-    now = datetime.now(timezone.utc).isoformat()
-    image_json = json.dumps(images) if images else "[]"
-
-    result = insert_one("posts", {
-        "title": title,
-        "content": content,
-        "author_id": author_id,
-        "category_id": category_id,
-        "post_type": "info",
-        "status": "pending_review",
-        "images": image_json,
-        "created_at": now,
-        "updated_at": now,
-    }, returning="id")
-    post_id = result["id"]
-
-    if tags:
-        sync_tags(post_id, tags)
-
-    logger.info(f"[入库] {title}")
-    return post_id
-
-
-def sync_tags(post_id: str, tag_names: list[str]) -> None:
-    """同步标签关联"""
-    for tag_name in tag_names:
-        if not tag_name:
-            continue
-        row = select_one("tags", {"name": tag_name}, columns="id,name")
-        if row:
-            tag_id = row["id"]
-        else:
-            r = insert_one("tags", {"name": tag_name}, returning="id")
-            tag_id = r["id"]
-        rel = select_one("post_tags", {"post_id": post_id, "tag_id": tag_id}, columns="post_id")
-        if not rel:
-            insert_one("post_tags", {"post_id": post_id, "tag_id": tag_id})
-
-
-# ────────────────────── 内容抓取 ──────────────────────
-
-def extract_article_list(page) -> list[dict]:
-    """从页面提取文章卡片列表"""
-    articles = page.evaluate("""() => {
-        const results = [];
-        // 查找文章卡片 (各种可能的 CSS 选择器)
-        const selectors = [
-            'article',
-            '[data-testid="article-card"]',
-            '.article-card',
-            '.widget-news-card',
-            'a[href*="/daftar/"]',
-            'a[href*="/berita/"]'
-        ];
-
-        const seen = new Set();
-
-        // 按选择器遍历
-        selectors.forEach(sel => {
-            document.querySelectorAll(sel).forEach(el => {
-                // 找到最近的标题链接
-                let titleEl = el.tagName === 'A' ? el : el.querySelector('a[href]');
-                if (!titleEl) return;
-                const href = titleEl.getAttribute('href') || titleEl.href;
-                // 只保留绝对路径形式的文章链接
-                if (!href || !href.match(/\\/(daftar|berita)\\/[^/]+/)) return;
-
-                const fullUrl = href.startsWith('http') ? href : 'https://www.goal.com' + href;
-                if (seen.has(fullUrl)) return;
-                seen.add(fullUrl);
-
-                const title = (titleEl.textContent || '').trim();
-                if (!title || title.length < 10) return;
-
-                // 图片
-                let imgSrc = '';
-                const img = el.querySelector('img');
-                if (img) {
-                    imgSrc = img.getAttribute('src') || img.getAttribute('data-src') || '';
-                }
-
-                // 摘要
-                let excerpt = '';
-                const excerptEl = el.querySelector('p, .excerpt, .description, [class*="excerpt"], [class*="description"], [class*="summary"]');
-                if (excerptEl) {
-                    excerpt = excerptEl.textContent.trim();
-                }
-
-                // 分类标签
-                const catEl = el.querySelector('[class*="category"], [class*="tag"], [class*="label"], [data-testid="category"]');
-                let category = '';
-                if (catEl) category = catEl.textContent.trim();
-
-                results.push({ title, url: fullUrl, imgSrc, excerpt, category });
-            });
-        });
-
-        return results.slice(0, 30);
-    }""")
-    return articles
-
-
-def scrape_article_detail(page, url: str) -> dict | None:
-    """抓取文章详情：标题、内容、图片"""
-    try:
-        page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(3000)
-    except Exception as e:
-        logger.warning(f"详情页加载超时: {url} - {e}")
-        return None
-
-    detail = page.evaluate("""() => {
-        // 标题
-        let title = '';
-        const h1 = document.querySelector('h1');
-        if (h1) title = h1.textContent.trim();
-
-        // 正文
-        const bodySelectors = [
-            '.article-body',
-            '[class*="article-body"]',
-            '[class*="article_content"]',
-            '[class*="content-block"]',
-            'article .body',
-            '[data-testid="article-body"]',
-            '.widget-match-report-body'
-        ];
-        let bodyEl = null;
-        bodySelectors.forEach(sel => {
-            if (!bodyEl) bodyEl = document.querySelector(sel);
-        });
-        // 降级：用 article 标签
-        if (!bodyEl) {
-            const article = document.querySelector('article');
-            if (article) bodyEl = article;
-        }
-
-        let contentHTML = '';
-        if (bodyEl) {
-            contentHTML = bodyEl.innerHTML;
-        }
-
-        // 图片
-        const images = [];
-        const allImgs = document.querySelectorAll('article img, .article-body img, [class*="content"] img');
-        allImgs.forEach(img => {
-            const src = img.getAttribute('src') || img.getAttribute('data-src');
-            if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('icon')) {
-                images.push({ url: src, alt: img.getAttribute('alt') || '' });
-            }
-        });
-
-        // 主图
-        let heroImage = '';
-        const heroImg = document.querySelector('meta[property="og:image"]');
-        if (heroImg) heroImage = heroImg.getAttribute('content') || '';
-        if (!heroImage && images.length > 0) heroImage = images[0].url;
-
-        return { title, contentHTML, heroImage, images: images.slice(0, 8) };
-    }""")
-
-    if not detail or not detail.get("title"):
-        return None
-
-    return detail
-
-
-def build_html_content(detail: dict, source_url: str) -> str:
-    """构建入库 HTML 内容"""
-    title = detail.get("title", "")
-    hero = detail.get("heroImage", "")
-    content = detail.get("contentHTML", "")
-
-    html_parts = []
-    if hero:
-        html_parts.append(f'<p><img src="{hero}" alt="{title}" style="max-width:100%;border-radius:8px"/></p>')
-    html_parts.append(content)
-    html_parts.append(f'<hr><p style="font-size:12px;color:#999">Sumber: <a href="{source_url}" target="_blank">Goal.com Indonesia</a></p>')
-    return '\n'.join(html_parts)
-
-
-# ────────────────────── 主流程 ──────────────────────
-
-def run(save_to_db: bool = False, max_articles: int = 15) -> list[dict]:
-    logger.info("=== Goal.com Indonesia 体育新闻抓取 ===")
-
-    existing_titles = load_existing_titles() if save_to_db else set()
-
+def fetch_ssr_match_data() -> list[dict]:
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"],
         )
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
             viewport={"width": 1366, "height": 768},
-            locale="id-ID",
         )
         page = context.new_page()
-        page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => false });
-        """)
 
-        # 抓取首页
-        logger.info(f"访问首页: {ID_BASE}")
+        logger.info(f"\u8bbf\u95ee\u9875\u9762: {PAGE_URL}")
         try:
-            page.goto(ID_BASE, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(5000)
+            page.goto(PAGE_URL, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(3000)
         except Exception as e:
-            logger.error(f"首页加载失败: {e}")
+            logger.error(f"\u9875\u9762\u52a0\u8f7d\u5931\u8d25: {e}")
             browser.close()
             return []
 
-        articles = extract_article_list(page)
-        logger.info(f"首页提取到 {len(articles)} 篇文章")
-
-        # 抓取新闻列表页
-        logger.info(f"访问新闻列表: {NEWS_URL}")
-        try:
-            page.goto(NEWS_URL, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(5000)
-            news_articles = extract_article_list(page)
-            logger.info(f"新闻列表提取到 {len(news_articles)} 篇文章")
-            articles.extend(news_articles)
-        except Exception as e:
-            logger.warning(f"新闻列表页加载失败: {e}")
-
-        # 去重
-        seen = set()
-        unique = []
-        for a in articles:
-            if a["url"] not in seen:
-                seen.add(a["url"])
-                unique.append(a)
-        articles = unique[:max_articles]
-        logger.info(f"去重后共 {len(articles)} 篇")
-
-        # 获取作者和分类
-        if save_to_db:
-            author_id = lookup_author_id()
-            category_id = lookup_category_id()
-
-        result = []
-        for i, article in enumerate(articles):
-            title_preview = article["title"][:60]
-            logger.info(f"抓取 [{i+1}/{len(articles)}]: {title_preview}...")
-
-            if save_to_db and article["title"] in existing_titles:
-                logger.info(f"  [跳过] 标题已存在")
-                continue
-
-            # 抓取详情
-            detail = scrape_article_detail(page, article["url"])
-            if not detail:
-                logger.warning(f"  [失败] 详情页内容为空")
-                continue
-
-            # 下载图片
-            images = []
-            hero = detail.get("heroImage", "")
-            if hero:
-                img_data = download_image_as_base64(hero)
-                if img_data:
-                    images.append(img_data)
-
-            # 构建 HTML
-            content = build_html_content(detail, article["url"])
-
-            # 提取标签
-            tags = []
-            cat = article.get("category", "")
-            if cat:
-                tags.append(cat)
-
-            if save_to_db:
-                insert_post(
-                    title=detail["title"],
-                    content=content,
-                    author_id=author_id,
-                    category_id=category_id,
-                    images=images,
-                    tags=tags,
-                )
-
-            result.append({
-                "title": detail["title"],
-                "url": article["url"],
-                "images_count": len(images),
-            })
-
-            # 避免请求过快
-            time.sleep(1)
-
+        next_data = page.evaluate("""() => {
+            const el = document.getElementById('__NEXT_DATA__');
+            return el ? JSON.parse(el.textContent) : null;
+        }""")
         browser.close()
 
-    logger.info(f"=== 抓取完成: 共处理 {len(result)} 篇 ===")
+    if not next_data:
+        logger.error("\u672a\u627e\u5230 __NEXT_DATA__")
+        return []
+
+    gamesets = next_data.get("props", {}).get("pageProps", {}).get("content", {}).get("gamesets", [])
+    matches = []
+    for gs in gamesets:
+        gs_matches = gs.get("matches", [])
+        for m in gs_matches:
+            matches.append(m)
+
+    logger.info(f"SSR \u6570\u636e\u63d0\u53d6\u5230 {len(matches)} \u573a\u6bd4\u8d5b")
+    return matches
+
+
+def fetch_live_scores() -> dict[str, dict]:
+    try:
+        r = httpx.get(
+            LIVE_SCORES_URL,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                "Referer": PAGE_URL,
+            },
+            timeout=30,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        logger.warning(f"\u5b9e\u65f6\u6bd4\u5206 API \u8bf7\u6c42\u5931\u8d25: {e}")
+        return {}
+
+    live_map = {}
+    for m in data.get("matches", []):
+        live_map[m["id"]] = m
+    logger.info(f"\u5b9e\u65f6\u6bd4\u5206 API \u8fd4\u56de {len(live_map)} \u573a\u6bd4\u8d5b")
+    return live_map
+
+
+# ---- 内容构建 ----
+
+MATCH_ROW_TEMPLATE = """<tr>
+    <td style="text-align:center;padding:8px 10px;border-bottom:1px solid #333">
+        <span style="font-size:12px;color:#888">{date_str}</span>
+    </td>
+    <td style="padding:8px 10px;border-bottom:1px solid #333;text-align:right">
+        <span style="font-weight:bold;font-size:16px;color:#fff">{team_a_name}</span>
+        <span style="font-size:11px;color:#888;margin-left:4px">{team_a_code}</span>
+    </td>
+    <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #333">
+        <span style="font-size:22px;font-weight:bold;color:#00d4ff">{score_a}</span>
+    </td>
+    <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #333;color:#888">VS</td>
+    <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #333">
+        <span style="font-size:22px;font-weight:bold;color:#00d4ff">{score_b}</span>
+    </td>
+    <td style="padding:8px 10px;border-bottom:1px solid #333;text-align:left">
+        <span style="font-weight:bold;font-size:16px;color:#fff">{team_b_name}</span>
+        <span style="font-size:11px;color:#888;margin-left:4px">{team_b_code}</span>
+    </td>
+    <td style="text-align:center;padding:8px 10px;border-bottom:1px solid #333">
+        <span style="font-size:12px;background:#1a3a5c;color:#00d4ff;padding:3px 8px;border-radius:12px">{status_label}</span>
+    </td>
+</tr>"""
+
+
+def build_match_row(match: dict) -> str:
+    team_a = match.get("teamA") or {}
+    team_b = match.get("teamB") or {}
+    score = match.get("score") or {}
+    status = match.get("status", "")
+    start_date = match.get("startDate", "")
+
+    if start_date:
+        try:
+            dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            date_str = dt.strftime("%m/%d %H:%M")
+        except Exception:
+            date_str = start_date[:16]
+    else:
+        date_str = ""
+
+    status_label = STATUS_LABELS.get(status, status)
+
+    return MATCH_ROW_TEMPLATE.format(
+        date_str=date_str,
+        team_a_name=team_a.get("name", "TBD"),
+        team_a_code=team_a.get("codeName", ""),
+        team_b_name=team_b.get("name", "TBD"),
+        team_b_code=team_b.get("codeName", ""),
+        score_a=score.get("teamA", "-"),
+        score_b=score.get("teamB", "-"),
+        status_label=status_label,
+    )
+
+
+def build_html_content(matches: list[dict], competition_name: str = "World Cup") -> str:
+    rows = "\n".join(build_match_row(m) for m in matches)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    return f"""<div style="background:#1a1a2e;color:#e0e0e0;font-family:Arial,sans-serif;padding:20px;border-radius:12px;max-width:800px">
+<h2 style="color:#00d4ff;text-align:center;margin-bottom:4px">\u26bd {competition_name} \u6bd4\u5206</h2>
+<p style="text-align:center;color:#888;font-size:12px;margin-bottom:16px">\u66f4\u65b0\u4e8e {now} | \u6570\u636e\u6765\u6e90: Goal.com</p>
+<table style="width:100%;border-collapse:collapse;color:#e0e0e0">
+<thead><tr style="background:#16213e">
+    <th style="padding:8px 10px;text-align:center;font-size:12px;color:#888">\u65e5\u671f</th>
+    <th style="padding:8px 10px;text-align:right">\u4e3b\u961f</th>
+    <th style="padding:8px 6px;text-align:center;width:40px">\u5f97\u5206</th>
+    <th style="padding:8px 6px;text-align:center;width:30px"></th>
+    <th style="padding:8px 6px;text-align:center;width:40px">\u5f97\u5206</th>
+    <th style="padding:8px 10px;text-align:left">\u5ba2\u961f</th>
+    <th style="padding:8px 10px;text-align:center">\u72b6\u6001</th>
+</tr></thead>
+<tbody>
+{rows}
+</tbody></table>
+</div>"""
+
+
+def build_match_title(match: dict) -> str:
+    team_a = (match.get("teamA") or {}).get("name", "TBD")
+    team_b = (match.get("teamB") or {}).get("name", "TBD")
+    score = match.get("score") or {}
+    status = match.get("status", "")
+    round_info = (match.get("round") or {}).get("name", "")
+
+    emoji = STATUS_EMOJI.get(status, "")
+    if status == "RESULT":
+        title = f"{emoji} {team_a} {score.get('teamA','-')}-{score.get('teamB','-')} {team_b}"
+    elif status == "LIVE":
+        title = f"{emoji} {team_a} {score.get('teamA','-')}-{score.get('teamB','-')} {team_b} (\u8fdb\u884c\u4e2d)"
+    else:
+        title = f"{emoji} {team_a} vs {team_b}"
+
+    if round_info:
+        title += f" \u2014 {round_info}"
+
+    return title
+
+
+# ---- 入库逻辑 ----
+
+def upsert_post(title: str, content: str, author_id: str,
+                category_id: str, match_id: str) -> str | None:
+    now = datetime.now(timezone.utc).isoformat()
+
+    existing = select_one("posts", {"title": title}, columns="id")
+    if existing:
+        update_one("posts", {"content": content, "updated_at": now}, {"id": existing["id"]})
+        logger.info(f"[\u66f4\u65b0] {title[:60]}")
+        return existing["id"]
+    else:
+        result = insert_one("posts", {
+            "title": title,
+            "content": content,
+            "author_id": author_id,
+            "category_id": category_id,
+            "post_type": "info",
+            "status": "published",
+            "images": [],
+            "created_at": now,
+            "updated_at": now,
+        }, returning="id")
+        post_id = result["id"]
+        logger.info(f"[\u65b0\u5efa] {title[:60]}")
+        return post_id
+
+
+# ---- 主流程 ----
+
+def run(save_to_db: bool = False, use_live: bool = False) -> list[dict]:
+    logger.info("=== Goal.com \u4e16\u754c\u676f\u6bd4\u5206\u6293\u53d6 ===")
+
+    # 抓取 SSR 数据
+    all_matches = fetch_ssr_match_data()
+    if not all_matches:
+        logger.error("\u672a\u83b7\u53d6\u5230\u6bd4\u8d5b\u6570\u636e")
+        return []
+
+    # 获取实时比分（如果启用）
+    live_scores = {}
+    if use_live:
+        live_scores = fetch_live_scores()
+
+    # 合并实时比分数据
+    for m in all_matches:
+        mid = m.get("id", "")
+        if mid in live_scores:
+            live = live_scores[mid]
+            m["status"] = live.get("status", m.get("status"))
+            if live.get("totalScore"):
+                m["score"] = {
+                    "teamA": live["totalScore"].get("teamA", 0),
+                    "teamB": live["totalScore"].get("teamB", 0),
+                }
+            m["_live_period"] = live.get("period")
+
+    # 只保留有比分的比赛（RESULT 或 LIVE）
+    scored_matches = []
+    fixture_matches = []
+    for m in all_matches:
+        status = m.get("status", "")
+        if status in ("RESULT", "LIVE"):
+            scored_matches.append(m)
+        elif status in ("FIXTURE", "SCHEDULED"):
+            fixture_matches.append(m)
+
+    logger.info(f"\u6709\u6bd4\u5206\u7684\u6bd4\u8d5b: {len(scored_matches)} \u573a")
+    logger.info(f"\u5c06\u6765\u6bd4\u8d5b: {len(fixture_matches)} \u573a")
+
+    # 获取分类和作者
+    author_id = None
+    category_id = None
+    if save_to_db:
+        author_id = lookup_author_id()
+        category_id = lookup_category_id()
+
+    result = []
+    # 按日期排序
+    scored_matches.sort(key=lambda m: m.get("startDate", ""))
+
+    for match in scored_matches:
+        title = build_match_title(match)
+        content = build_html_content([match])
+
+        team_a = (match.get("teamA") or {}).get("name", "TBD")
+        team_b = (match.get("teamB") or {}).get("name", "TBD")
+        score = match.get("score") or {}
+        status = match.get("status", "")
+        round_name = (match.get("round") or {}).get("name", "")
+
+        print(f"  {status:8s} | {team_a:20s} {score.get('teamA','-'):>2} - {score.get('teamB','-'):<2} {team_b:20s} | {round_name}")
+
+        if save_to_db and author_id and category_id:
+            upsert_post(title, content, author_id, category_id, match.get("id", ""))
+
+        result.append({
+            "id": match.get("id"),
+            "title": title,
+            "status": status,
+            "team_a": team_a,
+            "team_b": team_b,
+            "score_a": score.get("teamA"),
+            "score_b": score.get("teamB"),
+            "round": round_name,
+        })
+
+    logger.info(f"=== \u6293\u53d6\u5b8c\u6210: {len(result)} \u573a\u6709\u6bd4\u5206\u7684\u6bd4\u8d5b ===")
     return result
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Goal.com Indonesia 体育新闻抓取")
-    parser.add_argument("--save", action="store_true", help="直接入库")
-    parser.add_argument("--max", type=int, default=15, help="最大文章数 (default: 15)")
+    parser = argparse.ArgumentParser(description="Goal.com \u4e16\u754c\u676f 2026 \u6bd4\u5206\u6293\u53d6")
+    parser.add_argument("--save", action="store_true", help="\u5165\u5e93\u5230 Supabase posts \u8868")
+    parser.add_argument("--live", action="store_true", help="\u540c\u65f6\u4ece\u5b9e\u65f6\u6bd4\u5206 API \u83b7\u53d6\u6700\u65b0\u6570\u636e")
     args = parser.parse_args()
-    run(save_to_db=args.save, max_articles=args.max)
+    run(save_to_db=args.save, use_live=args.live)
 
 
 if __name__ == "__main__":
