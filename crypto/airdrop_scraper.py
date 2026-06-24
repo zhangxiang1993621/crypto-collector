@@ -391,7 +391,7 @@ def build_item_card(item: dict, index: int) -> str:
         '<div style="background:#f0fdf4;padding:12px 16px;border-radius:8px;'
         'margin:0 0 10px;border-left:4px solid #22c55e;">'
         f'<p style="font-weight:bold;color:#166534;margin:0 0 4px;">'
-        f'🪂 #{index} {exchange} · 空投/福利 {date_line}</p>'
+        f'🪂 #{index} {exchange} · Airdrop {date_line}</p>'
         f'<p style="font-size:15px;color:#14532d;margin:0 0 4px;">{escaped_title}</p>',
     ]
 
@@ -405,7 +405,7 @@ def build_item_card(item: dict, index: int) -> str:
         parts.append(
             f'<a href="{escaped_url}" target="_blank" rel="noopener" '
             'style="color:#3b82f6;text-decoration:none;font-size:13px;">'
-            '🔗 原文 →</a>'
+            '🔗 Sumber →</a>'
         )
 
     parts.append('</div>')
@@ -420,15 +420,15 @@ def build_daily_post_html(items: list[dict], day_str: str, update_time: str) -> 
 
     return "\n".join([
         f'<div style="text-align:center;padding:4px 0 16px;">'
-        f'<h2 style="margin:0;color:#1a1a2e;">🪂 加密空投/福利日报</h2>'
+        f'<h2 style="margin:0;color:#1a1a2e;">🪂 Airdrop Kripto Harian</h2>'
         f'<p style="color:#888;font-size:13px;margin:6px 0 0;">'
-        f'� {day_str} ｜ 已收录 {len(items)} 条 ｜ 更新于 {update_time} UTC</p>'
+        f'📅 {day_str} ｜ Terkumpul {len(items)} item ｜ Diperbarui {update_time} UTC</p>'
         f'</div>',
         '<hr>',
         *cards,
         '<hr>',
         '<p style="font-size:11px;color:#aaa;text-align:center;">'
-        '🤖 信息由 Airdrop 爬虫自动采集，仅供参考，请以交易所官方公告为准。</p>',
+        '🤖 Informasi dikumpulkan otomatis oleh bot Airdrop. Hanya referensi, harap merujuk pada pengumuman resmi exchange.</p>',
     ])
 
 
@@ -441,7 +441,7 @@ def extract_existing_urls(html: str) -> set[str]:
 
 
 def build_daily_title(day_str: str) -> str:
-    return f"🪂 加密空投/福利日报 | {day_str}"
+    return f"🪂 Airdrop Kripto Harian | {day_str}"
 
 
 def _e(text: str) -> str:
@@ -500,7 +500,7 @@ def deduplicate(items: list[dict]) -> list[dict]:
 
 def find_today_post(cat_id: str, day_str: str) -> dict | None:
     """查找今天的空投日报帖"""
-    title_match = f"🪂 加密空投/福利日报 | {day_str}"
+    title_match = f"🪂 Airdrop Kripto Harian | {day_str}"
     sql = '''
         SELECT id, title, content FROM posts 
         WHERE category_id = %s AND title = %s 
@@ -538,7 +538,7 @@ def merge_items(existing: list[dict], new: list[dict]) -> tuple[list[dict], list
 # ────────────────────── 主流程 ──────────────────────
 
 def run(save: bool = False, max_items: int = 20):
-    logger.info("=== Web3 空投福利信息爬取 ===")
+    logger.info("=== Pengambilan Info Airdrop Web3 ===")
 
     scrapers = {
         "Binance": scrape_binance,
@@ -553,22 +553,22 @@ def run(save: bool = False, max_items: int = 20):
         try:
             items = fn()
             matched = [i for i in items if match_airdrop(i["title"])]
-            logger.info(f"  [{name}] 匹配空投关键词: {len(matched)}/{len(items)}")
+            logger.info(f"  [{name}] cocok kata kunci airdrop: {len(matched)}/{len(items)}")
             all_items.extend(matched)
         except Exception as e:
-            logger.error(f"  [{name}] 出错: {e}")
+            logger.error(f"  [{name}] error: {e}")
 
     # 去重
     all_items = deduplicate(all_items)
-    logger.info(f"共计 {len(all_items)} 条空投信息（去重后）")
+    logger.info(f"Total {len(all_items)} info airdrop (setelah deduplikasi)")
 
     if not all_items:
-        logger.warning("无匹配信息")
+        logger.warning("Tidak ada info yang cocok")
         return
 
     # 打印预览（处理 Windows GBK 编码）
     _safe_print("\n" + "=" * 60)
-    _safe_print("  空投/福利信息汇总")
+    _safe_print("  Ringkasan Info Airdrop")
     _safe_print("=" * 60)
     for i, item in enumerate(all_items[:max_items]):
         _safe_print(f"\n[{i + 1}] [{item['exchange']}] {item.get('release_date', '')}")
@@ -590,15 +590,15 @@ def run(save: bool = False, max_items: int = 20):
 
         if existing_post:
             # 已存在今日日报 → 追加新条目卡片
-            logger.info(f"已存在今日日报 id={existing_post['id'][:8]}...，准备追加")
+            logger.info(f"Sudah ada harian hari ini id={existing_post['id'][:8]}..., siap tambah")
             existing_urls = extract_existing_urls(existing_post["content"])
             new_items = [i for i in all_items if i.get("url") not in existing_urls]
 
             if not new_items:
-                logger.info("无新条目，跳过更新")
+                logger.info("Tidak ada item baru, lewati pembaruan")
                 return
 
-            logger.info(f"发现 {len(new_items)} 条新信息，追加到日报")
+            logger.info(f"Ditemukan {len(new_items)} info baru, tambahkan ke harian")
 
             # 在免责声明前插入新卡片
             existing_html = existing_post["content"]
@@ -614,13 +614,13 @@ def run(save: bool = False, max_items: int = 20):
             header_end = "</div>\n<hr>"
             old_header, rest = before.split(header_end, 1) if header_end in before else (before, "")
             new_header = re.sub(
-                r'已收录 \d+ 条',
-                f'已收录 {card_count} 条',
+                r'Terkumpul \d+ item',
+                f'Terkumpul {card_count} item',
                 old_header
             )
             new_header = re.sub(
-                r'更新于 \d{2}:\d{2} UTC',
-                f'更新于 {update_time} UTC',
+                r'Diperbarui \d{2}:\d{2} UTC',
+                f'Diperbarui {update_time} UTC',
                 new_header
             )
 
@@ -637,7 +637,7 @@ def run(save: bool = False, max_items: int = 20):
                 "updated_at": now_utc.isoformat(),
             }, {"id": existing_post["id"]})
 
-            logger.info(f"[追加] 日报 {existing_post['id'][:8]}... +{len(new_items)} 条 → 共 {card_count} 条")
+            logger.info(f"[Tambah] Harian {existing_post['id'][:8]}... +{len(new_items)} item → total {card_count} item")
         else:
             # 新日报
             items_to_post = all_items[:max_items]
@@ -659,13 +659,13 @@ def run(save: bool = False, max_items: int = 20):
             pid = result["id"]
             all_tags = list(set(["Airdrop"] + [i["exchange"] for i in items_to_post]))
             sync_tags(pid, all_tags)
-            logger.info(f"[入库] 日报 id={pid[:8]}... {len(items_to_post)} 条")
+            logger.info(f"[Simpan] Harian id={pid[:8]}... {len(items_to_post)} item")
 
         # 更新所有标签
         all_tags = list(set(["Airdrop"] + [i["exchange"] for i in all_items]))
         sync_tags(existing_post["id"] if existing_post else pid, all_tags)
 
-    logger.info("=== 完成 ===")
+    logger.info("=== Selesai ===")
 
 
 def _parse_items_from_cards(html: str) -> list[dict]:
@@ -683,9 +683,9 @@ def _parse_items_from_cards(html: str) -> list[dict]:
 
 
 def main():
-    p = argparse.ArgumentParser(description="Web3 空投福利信息爬取")
-    p.add_argument("--save", action="store_true", help="写入数据库")
-    p.add_argument("--max", type=int, default=20, help="最大条目数")
+    p = argparse.ArgumentParser(description="Pengambilan Info Airdrop Web3")
+    p.add_argument("--save", action="store_true", help="Simpan ke database")
+    p.add_argument("--max", type=int, default=20, help="Maks item")
     args = p.parse_args()
     run(save=args.save, max_items=args.max)
 
