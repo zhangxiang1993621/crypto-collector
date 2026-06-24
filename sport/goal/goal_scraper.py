@@ -242,7 +242,7 @@ def build_match_title(match: dict) -> str:
     if status == "RESULT":
         title = f"{emoji} {team_a} {score.get('teamA','-')}-{score.get('teamB','-')} {team_b}"
     elif status == "LIVE":
-        title = f"{emoji} {team_a} {score.get('teamA','-')}-{score.get('teamB','-')} {team_b} (\u8fdb\u884c\u4e2d)"
+        title = f"{emoji} {team_a} {score.get('teamA','-')}-{score.get('teamB','-')} {team_b} (Sedang Berlangsung)"
     else:
         title = f"{emoji} {team_a} vs {team_b}"
 
