@@ -64,7 +64,7 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-        INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
+        POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
       run: python news_scrapers/indo_news/indo_news_scraper.py --save --max 15 || echo "[FAIL]"
 
   tokocrypto:

@@ -122,7 +122,7 @@ INDO_KEYWORDS = [
 
 
 def get_cat_id() -> str:
-    name = os.environ.get("INDO_CATEGORY_NAME") or "news"
+    name = os.environ.get("POSTS_CATEGORY_NAME") or "news"
     row = select_one("categories", {"name": name}, columns="id")
     if not row:
         logger.error(f"未找到分类: {name}")
