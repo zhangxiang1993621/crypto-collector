@@ -2,7 +2,7 @@
 
 功能：从 Google News RSS 抓取印度尼西亚每日热点新闻，
       从 trends24.in 抓取 X（Twitter）印尼区实时热搜话题，
-      以机器人身份发布到 Indo Street 分类。
+      以机器人身份发布到 news 分类。
 
 用法：
     python indo_news_scraper/indo_news_scraper.py                  # 仅抓取预览

@@ -44,7 +44,7 @@ TASK_CATEGORIES: dict[str, list[str]] = {
     "管理工具": ["create_bots", "clean_all"],
 }
 
-CATEGORY_ORDER = ["新闻爬虫", "AI 生成", "电子竞技", "Indo Street", "体育", "加密市场", "美股数据", "管理工具"]
+CATEGORY_ORDER = ["新闻爬虫", "AI 生成", "电子竞技", "体育", "加密市场", "美股数据", "管理工具"]
 
 
 def get_task_category(task_name: str) -> str:
