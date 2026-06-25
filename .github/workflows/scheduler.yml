@@ -18,6 +18,7 @@ on:
   - cron: 0 8,20 * * *
   - cron: 0 8,20 * * *
   - cron: 30 21 * * 1-5
+  - cron: 0 10 * * *
   workflow_dispatch: null
 
 jobs:
@@ -64,8 +65,8 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-        POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
-      run: python news_scrapers/indo_news/indo_news_scraper.py --save --max 15 || echo "[FAIL]"
+        INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
+      run: python news_scrapers/indo_news/indo_news_scraper.py --save --max 10 || echo "[FAIL]"
 
   tokocrypto:
     runs-on: ubuntu-latest
@@ -246,6 +247,88 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python crypto/okx/okx_scraper.py --save --max 10 || echo "[FAIL]"
+
+  # ══ 印尼甲级联赛 (CloakBrowser, Cloudflare) ══
+  forebet:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        cloakbrowser install || echo "CloakBrowser verify skipped"
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python sport/forebet/forebet_scraper.py --save || echo "[FAIL]"
+
+  fastscore:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        cloakbrowser install || echo "CloakBrowser verify skipped"
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python sport/fastscore/fastscore_scraper.py --save || echo "Fastscore Cloudflare blocked"
+
+  footballant:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        cloakbrowser install || echo "CloakBrowser verify skipped"
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python sport/footballant/footballant_scraper.py --save || echo "Footballant - check LEAGUE_ID"
+
+  # ══ 印尼羽毛球 (CloakBrowser) ══
+  bwf_indonesia:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        cloakbrowser install || echo "CloakBrowser verify skipped"
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python sport/badminton/bwf_indonesia_scraper.py --save || echo "BWF Indonesia done"
+
+  bwf_calendar:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        cloakbrowser install || echo "CloakBrowser verify skipped"
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python sport/badminton/bwf_calendar_scraper.py --save || echo "BWF Calendar done"
 
   # ══════════════ CloakBrowser (美股) ══════════════
   us_stock:

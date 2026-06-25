@@ -38,7 +38,7 @@ TASK_CATEGORIES: dict[str, list[str]] = {
     "新闻爬虫": ["binance_news", "indo_news"],
     "AI 生成": [],  # 暂未启用
     "电子竞技": ["indonesia_esports"],
-    "体育": ["fifa_schedule", "fifa_blog", "goal"],
+    "体育": ["fifa_schedule", "fifa_blog", "goal", "forebet", "fastscore", "footballant", "bwf_indonesia", "bwf_calendar"],
     "加密市场": ["price_collector", "airdrop", "tokocrypto", "indodax", "pintu", "mobee", "osl", "bitget", "okx"],
     "美股数据": ["us_stock"],
     "管理工具": ["create_bots", "clean_all"],

@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 # 直连数据库（绕过 REST API 作业限制）
 from db_direct import select_one, select_all, insert_one, execute_sql
 
-load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,27 +37,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ────────────────────── 新闻源 ──────────────────────
+# ────────────────────── 新闻源（社会热点优先） ──────────────────────
 
 NEWS_SOURCES = [
-    # Google News RSS - 印尼语 / 印尼地区
+    # Google News 印尼主页热门
     {
         "name": "Google News Indonesia",
         "url": "https://news.google.com/rss?hl=id&gl=ID&ceid=ID:id",
         "lang": "id",
     },
-    {
-        "name": "Google News Indonesia (Top)",
-        "url": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVHZ0pWVXlnQVAB?hl=id&gl=ID&ceid=ID:id",
-        "lang": "id",
-    },
-    # 全球印尼相关
-    {
-        "name": "Google News Indonesia (EN)",
-        "url": "https://news.google.com/rss/search?q=Indonesia&hl=en-US&gl=US&ceid=US:en",
-        "lang": "en",
-    },
-    # 社交媒体热点 / 病毒式传播话题 (X/Twitter 等效源)
+    # 社交媒体热点 / 病毒式传播话题
     {
         "name": "Google News Trending",
         "url": "https://news.google.com/rss/search?q=indonesia+trending+today&hl=id&gl=ID&ceid=ID:id",
@@ -68,33 +57,13 @@ NEWS_SOURCES = [
         "url": "https://news.google.com/rss/search?q=viral+indonesia&hl=id&gl=ID&ceid=ID:id",
         "lang": "id",
     },
+    # 城市社会新闻
     {
         "name": "Google News Jakarta",
-        "url": "https://news.google.com/rss/search?q=jakarta&hl=id&gl=ID&ceid=ID:id",
+        "url": "https://news.google.com/rss/search?q=jakarta+berita&hl=id&gl=ID&ceid=ID:id",
         "lang": "id",
     },
-    # ─── X / Twitter 印尼热点 ───
-    {
-        "name": "X Trending Indonesia",
-        "url": "https://news.google.com/rss/search?q=twitter+indonesia+trending&hl=id&gl=ID&ceid=ID:id",
-        "lang": "id",
-    },
-    {
-        "name": "X Viral Indonesia",
-        "url": "https://news.google.com/rss/search?q=twitter+indonesia+viral&hl=id&gl=ID&ceid=ID:id",
-        "lang": "id",
-    },
-    {
-        "name": "X Trending Indonesia (EN)",
-        "url": "https://news.google.com/rss/search?q=indonesia+twitter+trending+today&hl=en-US&gl=US&ceid=US:en",
-        "lang": "en",
-    },
-    {
-        "name": "X News Indonesia",
-        "url": "https://news.google.com/rss/search?q=%22twitter%22+indonesia+news&hl=id&gl=ID&ceid=ID:id",
-        "lang": "id",
-    },
-    # 印尼社交网络热点综合
+    # 社交网络热点综合
     {
         "name": "SocMed Trending",
         "url": "https://news.google.com/rss/search?q=indonesia+sosmed+trending+hari+ini&hl=id&gl=ID&ceid=ID:id",
@@ -107,14 +76,12 @@ NEWS_SOURCES = [
     },
 ]
 
-# ────────────────────── 关键词过滤 ──────────────────────
+# ────────────────────── 关键词过滤（社会热点） ──────────────────────
 INDO_KEYWORDS = [
-    "indonesia", "jakarta", "jokowi", "prabowo", "rupiah",
-    "bali", "surabaya", "bandung", "gojek", "tokopedia",
-    "pertamina", "garuda", "pln", "ojk", "bank indonesia",
-    "idx", "ihsg", "kpu", "dpr", "pdi", "gerindra",
-    "freeport", "nusantara", "ikn", "viral", "trending",
-    "gempa", "banjir", "macet", "bpjs", "umkm",
+    "indonesia", "jakarta", "jokowi", "prabowo", "bali", "surabaya",
+    "bandung", "viral", "trending", "netizen", "sosmed",
+    "gempa", "banjir", "macet", "kecelakaan", "kebakaran",
+    "kriminal", "polisi", "demo", "bencana", "lpbd",
 ]
 
 
@@ -122,7 +89,7 @@ INDO_KEYWORDS = [
 
 
 def get_cat_id() -> str:
-    name = os.environ.get("POSTS_CATEGORY_NAME") or "news"
+    name = os.environ.get("INDO_CATEGORY_NAME") or "Indo Street"
     row = select_one("categories", {"name": name}, columns="id")
     if not row:
         logger.error(f"未找到分类: {name}")
@@ -266,7 +233,7 @@ def fetch_x_trends_indonesia() -> list[dict]:
                 continue
             seen.add(topic.lower())
 
-            if len(items) >= 30:  # 最多 30 条趋势
+            if len(items) >= 8:  # 最多 8 条趋势（社会热点精选）
                 break
 
             # X 搜索页
@@ -419,8 +386,8 @@ def run(save: bool = False, max_items: int = 20):
     # ── 第二步：抓取 X/Twitter 实时趋势 ──
     x_trends = fetch_x_trends_indonesia()
 
-    # 将 X 趋势合并到文章列表（X 趋势优先展示）
-    combined = x_trends[:8] + all_articles
+    # 将 X 趋势合并到文章列表（X 趋势优先展示，最多取 5 条）
+    combined = x_trends[:5] + all_articles
 
     # 去重
     combined = deduplicate(combined)
@@ -486,7 +453,7 @@ def run(save: bool = False, max_items: int = 20):
 def main():
     p = argparse.ArgumentParser(description="印尼热点新闻抓取")
     p.add_argument("--save", action="store_true", help="写入数据库")
-    p.add_argument("--max", type=int, default=20, help="最大条目数")
+    p.add_argument("--max", type=int, default=10, help="最大条目数")
     args = p.parse_args()
     run(save=args.save, max_items=args.max)
 

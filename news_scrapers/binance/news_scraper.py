@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 from db_direct import select_one, select_all, insert_one, upsert_one, get_connection, execute_sql
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
-load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,7 +35,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://www.binance.bh/zh-CN/square/news/all"
+BASE_URL = "https://www.binance.bh/id-ID/square/news/all"
 
 
 def scrape_binance_news(scroll_times=3, max_articles=50):
@@ -61,14 +61,14 @@ def scrape_binance_news(scroll_times=3, max_articles=50):
                 "Chrome/125.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1280, "height": 800},
-            locale="zh-CN",
+            locale="id-ID",
         )
         page = context.new_page()
         # 隐藏 webdriver 特征
         page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => false });
             Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['id-ID', 'id', 'en'] });
         """)
 
         logger.info(f"正在访问 {BASE_URL} ...")
@@ -138,11 +138,11 @@ def scrape_binance_news(scroll_times=3, max_articles=50):
                     const txt = node.textContent.trim();
                     if (!txt) continue;
 
-                    // 时间: 匹配相对时间或绝对日期格式
+                    // 时间: 匹配印尼语相对时间或绝对日期格式
                     if (!article.time && (
-                        /^[0-9]+(小时|分钟|天|秒)/.test(txt) ||
-                        /^[0-9]+月[0-9]+日/.test(txt) ||
-                        /^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(txt)
+                        /^[0-9]+(\s)?(jam|menit|hari|detik)/.test(txt) ||
+                        /^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(txt) ||
+                        /^[0-9]{1,2}\s(Jan|Feb|Mar|Apr|Mei|Jun|Jul|Agu|Sep|Okt|Nov|Des)/i.test(txt)
                     )) {
                         article.time = txt;
                         continue;
@@ -383,6 +383,7 @@ def insert_one_post(article: dict, author_id: str, category_id: str,
     html_content = build_html_content(article, image_list)
 
     # 插入 posts 表
+    # images 字段是 text[]，每个元素是图片信息的 JSON 字符串
     post_data = {
         "title": title,
         "content": html_content,
@@ -390,7 +391,7 @@ def insert_one_post(article: dict, author_id: str, category_id: str,
         "category_id": category_id,
         "post_type": "info",
         "status": "pending_review",
-        "images": json.dumps(image_list),
+        "images": [json.dumps(img) for img in image_list],
         "is_hot": False,
         "is_pinned": False,
     }
@@ -565,7 +566,7 @@ def main():
                 "Chrome/125.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1280, "height": 800},
-            locale="zh-CN",
+            locale="id-ID",
         )
         page = context.new_page()
         try:
