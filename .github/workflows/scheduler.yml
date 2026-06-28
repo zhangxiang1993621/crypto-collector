@@ -19,6 +19,10 @@ on:
   - cron: 0 8,20 * * *
   - cron: 30 21 * * 1-5
   - cron: 0 10 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 8,20 * * *
+  - cron: 0 9,21 * * *
   workflow_dispatch: null
 
 jobs:
@@ -120,6 +124,48 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python crypto/mobee/mobee_scraper.py --save --max 10 || echo "[FAIL]"
+
+  detik_sport:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python news_scrapers/sport_detik/detik_scraper.py --save --max 15 || echo "[FAIL]"
+
+  tribunbola:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python news_scrapers/tribunbola/tribunbola_scraper.py --save --max 10 || echo "[FAIL]"
+
+  dailysports:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - {run: pip install -r requirements.txt}
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python news_scrapers/dailysports/dailysports_scraper.py --save --max 10 || echo "[FAIL]"
 
   # ══════════════ Playwright (Chromium) jobs ══════════════
   binance_news:
@@ -247,6 +293,22 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
       run: python crypto/okx/okx_scraper.py --save --max 10 || echo "[FAIL]"
+
+  bolasport:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - {uses: actions/checkout@v4}
+    - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
+    - run: |
+        pip install -r requirements.txt
+        playwright install chromium
+    - name: Run
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
+        FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
+      run: python news_scrapers/bolasport/bolasport_scraper.py --save --max 15 || echo "[FAIL]"
 
   # ══ 印尼甲级联赛 (CloakBrowser, Cloudflare) ══
   forebet:
