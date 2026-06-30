@@ -38,7 +38,7 @@ TASK_CATEGORIES: dict[str, list[str]] = {
     "新闻爬虫": ["binance_news", "indo_news"],
     "AI 生成": [],  # 暂未启用
     "电子竞技": ["indonesia_esports"],
-    "体育": ["fifa_schedule", "fifa_blog", "goal", "forebet", "fastscore", "footballant", "bwf_indonesia", "bwf_calendar", "detik_sport", "bolasport", "tribunbola", "dailysports"],
+    "体育": ["fifa_schedule", "fifa_blog", "goal", "forebet", "fastscore", "footballant", "bwf_indonesia", "bwf_calendar", "detik_sport", "bolasport", "tribunbola", "dailysports", "mainbasket", "ibl_data"],
     "加密市场": ["price_collector", "airdrop", "tokocrypto", "indodax", "pintu", "mobee", "osl", "bitget", "okx"],
     "美股数据": ["us_stock"],
     "管理工具": ["create_bots", "clean_all"],
@@ -128,6 +128,8 @@ def _job_label(job_name: str) -> str:
         "bolasport": "BolaSport 新闻抓取",
         "tribunbola": "Tribunbola 新闻抓取",
         "dailysports": "Dailysports 新闻抓取",
+        "mainbasket": "Mainbasket IBL 篮球新闻",
+        "ibl_data": "IBL Gopay 2026 赛事数据",
     }
     return labels.get(job_name, job_name)
 
