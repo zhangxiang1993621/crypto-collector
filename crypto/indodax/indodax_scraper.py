@@ -299,7 +299,7 @@ def sync_tags(post_id: str, tags: list[str]) -> None:
 # ────────────────────── 主流程 ──────────────────────
 
 
-def run(save: bool = False, max_items: int = 20):
+def run(save: bool = False, max_items: int = 5):
     logger.info("=== Indodax Blog 新闻抓取 ===")
 
     all_items = fetch_indodax_news(max_items=max_items)
@@ -365,7 +365,7 @@ def run(save: bool = False, max_items: int = 20):
 def main():
     p = argparse.ArgumentParser(description="Indodax 博客新闻抓取")
     p.add_argument("--save", action="store_true", help="写入数据库")
-    p.add_argument("--max", type=int, default=20, help="最大条目数")
+    p.add_argument("--max", type=int, default=5, help="最大条目数")
     args = p.parse_args()
     run(save=args.save, max_items=args.max)
 

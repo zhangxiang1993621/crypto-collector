@@ -239,7 +239,7 @@ def deduplicate(items: list[dict]) -> list[dict]:
     return result
 
 
-def run(save: bool = False, max_items: int = 15):
+def run(save: bool = False, max_items: int = 10):
     logger.info("=== Detik Sport 新闻抓取 ===")
 
     all_articles = []
@@ -305,7 +305,7 @@ def run(save: bool = False, max_items: int = 15):
 def main():
     parser = argparse.ArgumentParser(description="Detik Sport 新闻抓取")
     parser.add_argument("--save", action="store_true", help="写入数据库")
-    parser.add_argument("--max", type=int, default=15, help="最大条目数")
+    parser.add_argument("--max", type=int, default=10, help="最大条目数")
     args = parser.parse_args()
     run(save=args.save, max_items=args.max)
 

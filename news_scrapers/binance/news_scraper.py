@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.binance.bh/id-ID/square/news/all"
 
 
-def scrape_binance_news(scroll_times=3, max_articles=50):
+def scrape_binance_news(scroll_times=3, max_articles=10):
     """抓取币安广场新闻
 
     参数:
@@ -529,7 +529,7 @@ def print_summary(articles):
 def main():
     parser = argparse.ArgumentParser(description="币安广场新闻抓取 + 入库工具")
     parser.add_argument("--scroll", type=int, default=10, help="滚动次数(默认 10)")
-    parser.add_argument("--max", type=int, default=100, help="最大抓取条数(默认 100)")
+    parser.add_argument("--max", type=int, default=10, help="最大抓取条数(默认 10)")
     parser.add_argument("--save", action="store_true", help="直接入库（需配置环境变量）")
     args = parser.parse_args()
 

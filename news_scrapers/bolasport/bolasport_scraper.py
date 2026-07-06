@@ -83,7 +83,7 @@ def extract_tags_from_text(title: str, category: str) -> list[str]:
     return tags
 
 
-def scrape_bolasport(max_articles: int = 20) -> list[dict]:
+def scrape_bolasport(max_articles: int = 10) -> list[dict]:
     logger.info("启动 Playwright 抓取 BolaSport...")
     articles = []
 
@@ -267,7 +267,7 @@ def deduplicate(items: list[dict]) -> list[dict]:
     return result
 
 
-def run(save: bool = False, max_items: int = 20):
+def run(save: bool = False, max_items: int = 10):
     logger.info("=== BolaSport.com 新闻抓取 ===")
 
     articles = scrape_bolasport(max_articles=max_items)
@@ -326,7 +326,7 @@ def run(save: bool = False, max_items: int = 20):
 def main():
     parser = argparse.ArgumentParser(description="BolaSport.com 新闻抓取")
     parser.add_argument("--save", action="store_true", help="写入数据库")
-    parser.add_argument("--max", type=int, default=20, help="最大条目数")
+    parser.add_argument("--max", type=int, default=10, help="最大条目数")
     args = parser.parse_args()
     run(save=args.save, max_items=args.max)
 

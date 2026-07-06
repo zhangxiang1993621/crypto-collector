@@ -137,7 +137,7 @@ def sync_tags_for_post(post_id: str, tag_names: list[str]) -> None:
 
 # ────────────────────── 页面抓取 ──────────────────────
 
-def fetch_article_list(max_articles: int = 50) -> list[dict]:
+def fetch_article_list(max_articles: int = 10) -> list[dict]:
     """从 Blog 列表页抓取所有文章链接、标题、描述和标签"""
     logger.info(f"正在访问 Blog 列表页: {BLOG_LIST_URL}")
     articles = []
@@ -383,7 +383,7 @@ def insert_post(title: str, content: str, author_id: str,
 
 # ────────────────────── 主流程 ──────────────────────
 
-def run(save_to_db: bool = False, max_articles: int = 50, output_file: str | None = None) -> list[dict]:
+def run(save_to_db: bool = False, max_articles: int = 10, output_file: str | None = None) -> list[dict]:
     logger.info("=== FIFA 世界杯 Blog 抓取 ===")
 
     # 1. 获取文章列表
@@ -461,7 +461,7 @@ def run(save_to_db: bool = False, max_articles: int = 50, output_file: str | Non
 def main():
     parser = argparse.ArgumentParser(description="FIFA 世界杯 Blog 抓取")
     parser.add_argument("--save", action="store_true", help="直接入库")
-    parser.add_argument("--max", type=int, default=50, help="最大抓取文章数 (默认 50)")
+    parser.add_argument("--max", type=int, default=10, help="最大抓取文章数 (默认 10)")
     parser.add_argument("--output", type=str, default=None, help="额外输出 JSON 文件(可选)")
     args = parser.parse_args()
 

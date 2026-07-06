@@ -346,7 +346,7 @@ def sync_tags(post_id: str, tags: list[str]) -> None:
             pass
 
 
-def run(save: bool = False, max_items: int = 3):
+def run(save: bool = False, max_items: int = 99999):
     logger.info("=== IBL Gopay 2026 赛事数据 ===")
 
     data = fetch_data()
@@ -428,7 +428,7 @@ def run(save: bool = False, max_items: int = 3):
 def main():
     parser = argparse.ArgumentParser(description="IBL Gopay 2026 赛事数据抓取")
     parser.add_argument("--save", action="store_true", help="写入数据库")
-    parser.add_argument("--max", type=int, default=3, help="最大入库条目数")
+    parser.add_argument("--max", type=int, default=99999, help="最大入库条目数")
     args = parser.parse_args()
     run(save=args.save, max_items=args.max)
 

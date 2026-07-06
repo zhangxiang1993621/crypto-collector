@@ -47,7 +47,7 @@ def _e(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def scrape_bitget(max_items: int = 10) -> list[dict]:
+def scrape_bitget(max_items: int = 5) -> list[dict]:
     logger.info("=== Bitget Indonesia 新闻抓取 (Playwright) ===")
     results: list[dict] = []
 
@@ -175,7 +175,7 @@ def sync_tags(post_id: str, tags: list[str]) -> None:
             pass
 
 
-def run(save: bool = False, max_items: int = 10):
+def run(save: bool = False, max_items: int = 5):
     items = deduplicate(scrape_bitget(max_items=max_items))
     logger.info(f"去重后共 {len(items)} 条")
     if not items:
@@ -206,7 +206,7 @@ def run(save: bool = False, max_items: int = 10):
 def main():
     p = argparse.ArgumentParser(description="Bitget Indonesia 新闻抓取")
     p.add_argument("--save", action="store_true")
-    p.add_argument("--max", type=int, default=10)
+    p.add_argument("--max", type=int, default=5)
     args = p.parse_args()
     run(save=args.save, max_items=args.max)
 

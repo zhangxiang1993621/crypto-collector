@@ -374,7 +374,7 @@ def deduplicate(items: list[dict]) -> list[dict]:
 
 # ────────────────────── 主流程 ──────────────────────
 
-def run(save: bool = False, max_items: int = 20):
+def run(save: bool = False, max_items: int = 10):
     logger.info("=== 印尼热点新闻 + X/Twitter 趋势抓取 ===")
 
     # ── 第一步：抓取 RSS 新闻 ──

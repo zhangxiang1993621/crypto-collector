@@ -159,7 +159,7 @@ def fetch_campaign_detail(campaign_url: str) -> dict:
     return detail
 
 
-def scrape_tokocrypto(max_items: int = 20) -> list[dict]:
+def scrape_tokocrypto(max_items: int = 5) -> list[dict]:
     """主抓取逻辑：活动列表 + 详情页"""
     activities = fetch_activity_list()
     results: list[dict] = []
@@ -332,7 +332,7 @@ def sync_tags(post_id: str, tags: list[str]) -> None:
 # ────────────────────── 主流程 ──────────────────────
 
 
-def run(save: bool = False, max_items: int = 20):
+def run(save: bool = False, max_items: int = 5):
     logger.info("=== Tokocrypto 活动抓取 ===")
 
     items = scrape_tokocrypto(max_items=max_items)
@@ -395,7 +395,7 @@ def run(save: bool = False, max_items: int = 20):
 def main():
     p = argparse.ArgumentParser(description="Tokocrypto 活动抓取")
     p.add_argument("--save", action="store_true", help="写入数据库")
-    p.add_argument("--max", type=int, default=20, help="最大条目数")
+    p.add_argument("--max", type=int, default=5, help="最大条目数")
     args = p.parse_args()
     run(save=args.save, max_items=args.max)
 

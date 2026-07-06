@@ -537,7 +537,7 @@ def merge_items(existing: list[dict], new: list[dict]) -> tuple[list[dict], list
 
 # ────────────────────── 主流程 ──────────────────────
 
-def run(save: bool = False, max_items: int = 20):
+def run(save: bool = False, max_items: int = 5):
     logger.info("=== Pengambilan Info Airdrop Web3 ===")
 
     scrapers = {
@@ -685,7 +685,7 @@ def _parse_items_from_cards(html: str) -> list[dict]:
 def main():
     p = argparse.ArgumentParser(description="Pengambilan Info Airdrop Web3")
     p.add_argument("--save", action="store_true", help="Simpan ke database")
-    p.add_argument("--max", type=int, default=20, help="Maks item")
+    p.add_argument("--max", type=int, default=5, help="Maks item")
     args = p.parse_args()
     run(save=args.save, max_items=args.max)
 

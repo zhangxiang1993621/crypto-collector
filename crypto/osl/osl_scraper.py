@@ -54,7 +54,7 @@ def _e(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def scrape_osl(max_items: int = 20) -> list[dict]:
+def scrape_osl(max_items: int = 5) -> list[dict]:
     logger.info("=== OSL Indonesia 公告抓取 (Playwright) ===")
     results: list[dict] = []
 
@@ -218,7 +218,7 @@ def sync_tags(post_id: str, tags: list[str]) -> None:
             pass
 
 
-def run(save: bool = False, max_items: int = 10):
+def run(save: bool = False, max_items: int = 5):
     items = deduplicate(scrape_osl(max_items=max_items))
     logger.info(f"去重后共 {len(items)} 条")
     if not items:
@@ -253,7 +253,7 @@ def run(save: bool = False, max_items: int = 10):
 def main():
     p = argparse.ArgumentParser(description="OSL Indonesia 公告抓取")
     p.add_argument("--save", action="store_true", help="写入数据库")
-    p.add_argument("--max", type=int, default=10, help="最大条目数")
+    p.add_argument("--max", type=int, default=5, help="最大条目数")
     run(save=p.parse_args().save, max_items=p.parse_args().max)
 
 

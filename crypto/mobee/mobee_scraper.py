@@ -141,7 +141,7 @@ def fetch_article_detail(url: str) -> dict:
     return detail
 
 
-def scrape_mobee(max_items: int = 20) -> list[dict]:
+def scrape_mobee(max_items: int = 5) -> list[dict]:
     items = fetch_news_list()
     results = []
     for item in items:
@@ -232,7 +232,7 @@ def sync_tags(post_id: str, tags: list[str]) -> None:
             pass
 
 
-def run(save: bool = False, max_items: int = 10):
+def run(save: bool = False, max_items: int = 5):
     logger.info("=== Mobee 新闻抓取 ===")
     items = deduplicate(scrape_mobee(max_items=max_items))
     logger.info(f"去重后共 {len(items)} 条")
@@ -266,7 +266,7 @@ def run(save: bool = False, max_items: int = 10):
 def main():
     p = argparse.ArgumentParser(description="Mobee 新闻抓取")
     p.add_argument("--save", action="store_true")
-    p.add_argument("--max", type=int, default=10)
+    p.add_argument("--max", type=int, default=5)
     args = p.parse_args()
     run(save=args.save, max_items=args.max)
 
