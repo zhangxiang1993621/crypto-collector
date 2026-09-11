@@ -1,7 +1,7 @@
 """清空全部帖子和评论脚本（测试用）
 
 ⚠️  危险操作！会删除 posts、comments、post_tags、likes、bookmarks
-   以及未被引用的孤儿 tags。
+   以及全部 tags（帖子清空后标签已不再被引用）。
 
 用法：
     python tools/clean_all.py                    # 交互模式，确认后执行
@@ -23,8 +23,8 @@ DELETE_ORDER = [
     ("bookmarks",     "bookmarks",           "收藏"),
     ("comments",      "comments",            "评论"),
     ("posts",         "posts",               "帖子"),
-    # 清理孤儿 tags
-    ("__orphan_tags__", None,                "孤儿标签"),
+    # 清空全部 tags（帖子清空后所有标签都已无引用）
+    ("__all_tags__",  None,                  "全部标签"),
 ]
 
 
@@ -53,18 +53,20 @@ def delete_table(table_name: str) -> int:
     return count
 
 
-def delete_orphan_tags() -> int:
-    """删除未被任何 post_tags 引用的孤儿标签"""
-    if not table_exists("tags") or not table_exists("post_tags"):
+def clear_all_tags() -> int:
+    """清空 tags 表并返回真实删除行数。
+
+    说明：本脚本会清空 posts 与 post_tags，清空后所有标签都不再被引用，
+    因此这里显式清空全部标签（原实现声称"仅删孤儿标签"，但因执行顺序在
+    post_tags 清空之后，实际同样是删除全部标签）。
+    """
+    if not table_exists("tags"):
         return 0
     try:
-        sql = """
-        DELETE FROM tags
-        WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags WHERE tag_id IS NOT NULL)
-        """
-        result = execute_sql(sql, fetch=False)
-        return result.rowcount if hasattr(result, 'rowcount') else 0
-    except Exception:
+        rows = execute_sql("DELETE FROM tags RETURNING id")
+        return len(rows) if rows else 0
+    except Exception as e:
+        print(f"  [错误] 清空 tags 失败: {e}")
         return 0
 
 
@@ -78,16 +80,9 @@ def run(dry_run: bool = False, skip_confirm: bool = False) -> None:
     total_rows = 0
     for name, table, label in DELETE_ORDER:
         count = 0
-        if name == "__orphan_tags__":
-            try:
-                orphan_sql = """
-                SELECT COUNT(*) AS cnt FROM tags
-                WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags WHERE tag_id IS NOT NULL)
-                """
-                rows = execute_sql(orphan_sql)
-                count = rows[0]["cnt"] if rows else 0
-            except Exception:
-                pass
+        if name == "__all_tags__":
+            if table_exists("tags"):
+                count = count_table("tags")
         else:
             if table_exists(table):
                 count = count_table(table)
@@ -119,8 +114,8 @@ def run(dry_run: bool = False, skip_confirm: bool = False) -> None:
     print("\n[删除] 开始删除...")
     total_deleted = 0
     for name, table, label in DELETE_ORDER:
-        if name == "__orphan_tags__":
-            deleted = delete_orphan_tags()
+        if name == "__all_tags__":
+            deleted = clear_all_tags()
         else:
             deleted = delete_table(table)
         total_deleted += deleted

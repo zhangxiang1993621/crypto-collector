@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import httpx
 from dotenv import load_dotenv
 # 直连数据库（绕过 REST API 作业限制）
-from db_direct import select_one, select_all, insert_one, execute_sql
+from db_direct import select_one, select_all, insert_one, existing_titles, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
@@ -417,7 +417,13 @@ def run(save: bool = False, max_items: int = 10):
         now = datetime.now(timezone.utc).isoformat()
         saved = 0
 
+        existing = existing_titles(cat_id, [a["title"][:200] for a in combined])
+
         for art in combined:
+            title = art["title"][:200]
+            if title in existing:
+                logger.info(f"  [跳过] 已存在: {title[:50]}...")
+                continue
             bot = get_random_bot()
 
             # X 趋势用特殊模板，普通新闻用原有模板

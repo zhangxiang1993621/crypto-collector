@@ -55,6 +55,15 @@ def get_task_category(task_name: str) -> str:
     return "其他"
 
 
+# 破坏性任务：会清空/删除生产数据，禁止在批量执行中被无确认触发
+DESTRUCTIVE_TASKS: set[str] = {"clean_all"}
+
+
+def is_destructive(task_name: str) -> bool:
+    """任务是否会破坏生产数据（供 GUI 二次确认与批量执行排除使用）"""
+    return task_name in DESTRUCTIVE_TASKS
+
+
 # ──────────────── 配置管理 ────────────────
 
 def _parse_yaml_jobs(yaml_path: Path) -> list[dict]:
@@ -171,7 +180,7 @@ def _merge_builtin_tasks(tasks: list[dict]) -> None:
             "cron": "",
             "enabled": False,
             "trigger": "manual",
-            "commands": ["python tools/clean_all.py --yes"],
+            "commands": ["python tools/clean_all.py"],
             "env_vars": {},
             "working_dir": str(PROJECT_DIR),
         },
@@ -396,10 +405,14 @@ class TaskScheduler:
                 return
 
     def run_category(self, category: str) -> None:
-        """执行某个分类下的全部任务（按顺序串行）"""
+        """执行某个分类下的全部任务（按顺序串行；跳过破坏性任务）"""
         cat_tasks = [t for t in self._tasks if t.get("category") == category]
+        for t in cat_tasks:
+            if is_destructive(t["name"]):
+                self._log(t["name"], "已跳过（破坏性任务需单独确认执行）")
+        cat_tasks = [t for t in cat_tasks if not is_destructive(t["name"])]
         if not cat_tasks:
-            self._log(None, f"分类 {category} 下没有任务")
+            self._log(None, f"分类 {category} 下没有可执行任务")
             return
         self._log(None, f"▶ 开始执行 [{category}] 全部 {len(cat_tasks)} 个任务")
         threading.Thread(target=self._execute_tasks_sequence, args=(cat_tasks, category), daemon=True).start()

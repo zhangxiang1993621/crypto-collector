@@ -145,6 +145,8 @@ def fetch_article_list(max_page: int = 3, per_page: int = 10) -> list[dict]:
 def fetch_article_detail(page: "Page", article: dict) -> dict:
     """用 Playwright 访问文章详情页，提取正文和标签"""
     url = article["url"]
+    content = ""
+    tags: list[str] = []
     try:
         page.goto(url, timeout=30000, wait_until="domcontentloaded")
         # 等待文章内容加载
@@ -352,8 +354,12 @@ def run(save: bool = False, max_items: int = 10):
             page = context.new_page()
 
             for art in articles:
-                # 获取详情
-                art = fetch_article_detail(page, art)
+                # 获取详情（单条失败只跳过该条，避免整轮崩溃）
+                try:
+                    art = fetch_article_detail(page, art)
+                except Exception as e:
+                    logger.error(f"  详情处理失败，跳过: {e}")
+                    continue
 
                 # 选发帖人
                 bot = get_random_indo_admin()

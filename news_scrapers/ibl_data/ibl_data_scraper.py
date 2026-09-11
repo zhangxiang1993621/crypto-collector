@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import httpx
 from dotenv import load_dotenv
-from db_direct import select_one, select_all, insert_one, execute_sql
+from db_direct import select_one, select_all, insert_one, update_one, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
@@ -379,13 +379,20 @@ def run(save: bool = False, max_items: int = 99999):
         category_id = get_category_id()
         now = datetime.now(timezone.utc).isoformat()
         saved = 0
+        updated = 0
 
-        if standings:
-            content = build_standings_html(standings)
-            tags = TAGS_DEFAULT + ["Klasemen", "Standings"]
-            try:
+        def _upsert_fixed(title: str, content: str, tags: list[str]) -> None:
+            """固定标题的帖子按标题 upsert：已存在则更新内容，避免每天新建重复帖。"""
+            nonlocal saved, updated
+            row = select_one("posts", {"title": title}, columns="id")
+            if row:
+                update_one("posts", {"content": content, "updated_at": now}, {"id": row["id"]})
+                post_id = row["id"]
+                updated += 1
+                logger.info("  [更新] %s", title)
+            else:
                 result = insert_one("posts", {
-                    "title": "🏀 Klasemen IBL Gopay 2026",
+                    "title": title,
                     "content": content,
                     "author_id": author_id,
                     "category_id": category_id,
@@ -394,33 +401,28 @@ def run(save: bool = False, max_items: int = 99999):
                     "created_at": now,
                     "updated_at": now,
                 }, returning="id")
-                sync_tags(result["id"], tags)
+                post_id = result["id"]
                 saved += 1
-                logger.info("  [入库] Klasemen IBL Gopay 2026 | tags=%s", tags[:5])
-            except Exception as e:
-                logger.error("  入库失败: %s", e)
+                logger.info("  [入库] %s | tags=%s", title, tags[:5])
+            sync_tags(post_id, tags)
 
-        if matches:
-            content = build_results_html(matches)
-            tags = TAGS_DEFAULT + ["Pertandingan", "Skor", "Jadwal"]
-            try:
-                result = insert_one("posts", {
-                    "title": "📊 Hasil & Jadwal IBL Gopay 2026",
-                    "content": content,
-                    "author_id": author_id,
-                    "category_id": category_id,
-                    "post_type": "info",
-                    "status": "pending_review",
-                    "created_at": now,
-                    "updated_at": now,
-                }, returning="id")
-                sync_tags(result["id"], tags)
-                saved += 1
-                logger.info("  [入库] Hasil & Jadwal IBL 2026 | tags=%s", tags[:5])
-            except Exception as e:
-                logger.error("  入库失败: %s", e)
+        try:
+            if standings:
+                _upsert_fixed(
+                    "🏀 Klasemen IBL Gopay 2026",
+                    build_standings_html(standings),
+                    TAGS_DEFAULT + ["Klasemen", "Standings"],
+                )
+            if matches:
+                _upsert_fixed(
+                    "📊 Hasil & Jadwal IBL Gopay 2026",
+                    build_results_html(matches),
+                    TAGS_DEFAULT + ["Pertandingan", "Skor", "Jadwal"],
+                )
+        except Exception as e:
+            logger.error("  入库失败: %s", e)
 
-        logger.info("[入库] %d 条", saved)
+        logger.info("[入库] %d 条，更新 %d 条", saved, updated)
 
     logger.info("=== 完成 ===")
 

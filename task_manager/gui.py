@@ -18,7 +18,7 @@ from tkinter import ttk, messagebox
 
 from task_manager.scheduler_engine import (
     TaskScheduler, load_config, save_config, sync_to_yaml,
-    CATEGORY_ORDER, get_task_category,
+    CATEGORY_ORDER, get_task_category, is_destructive,
 )
 
 
@@ -282,7 +282,17 @@ class TaskManagerApp:
             messagebox.showinfo("提示", f"分类「{iid}」下没有任务")
             return
 
-        if not messagebox.askyesno("确认执行", f"即将执行 [{iid}] 下的全部 {len(cat_tasks)} 个任务，是否继续？"):
+        skipped = [t for t in cat_tasks if is_destructive(t["name"])]
+        if skipped:
+            messagebox.showinfo(
+                "提示",
+                "以下破坏性任务将被跳过（需单独执行并确认）：\n" + "\n".join(t["name"] for t in skipped),
+            )
+        safe_tasks = [t for t in cat_tasks if not is_destructive(t["name"])]
+        if not safe_tasks:
+            return
+
+        if not messagebox.askyesno("确认执行", f"即将执行 [{iid}] 下的全部 {len(safe_tasks)} 个任务，是否继续？"):
             return
 
         self._log_callback("系统", f"▶ 手动触发 [{iid}] 全部任务")
@@ -321,6 +331,17 @@ class TaskManagerApp:
             messagebox.showwarning("提示", "请先选择一个具体任务（不是分类）")
             return
         name = task["name"]
+
+        # 破坏性任务（会清空生产数据）必须二次确认，避免一键误触
+        if is_destructive(name):
+            if not messagebox.askyesno(
+                "危险操作确认",
+                f"任务「{task.get('label', name)}」会删除生产库中的帖子、评论与标签，且不可恢复。\n\n"
+                "确定要执行吗？",
+                icon="warning",
+            ):
+                self._log_callback(name, "已取消（用户未确认危险操作）")
+                return
 
         self._log_callback(name, "▶ 手动触发")
         self.scheduler.run_now(name)

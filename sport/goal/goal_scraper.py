@@ -349,13 +349,9 @@ def build_match_title(match: dict) -> str:
     status = match.get("status", "")
     round_info = (match.get("round") or {}).get("name", "")
 
-    emoji = STATUS_EMOJI.get(status, "")
-    if status == "RESULT":
-        title = f"{emoji} {team_a} {score.get('teamA', '-')}-{score.get('teamB', '-')} {team_b}"
-    elif status == "LIVE":
-        title = f"{emoji} {team_a} {score.get('teamA', '-')}-{score.get('teamB', '-')} {team_b} (Sedang Berlangsung)"
-    else:
-        title = f"{emoji} {team_a} vs {team_b}"
+    # 标题只使用稳定字段（队名 + 轮次），比分与状态只体现在正文中；
+    # 否则 LIVE→FT 或比分变化都会生成新标题，导致同一场比赛反复新建帖子。
+    title = f"⚽ {team_a} vs {team_b}"
 
     if round_info:
         title += f" \u2014 {round_info}"

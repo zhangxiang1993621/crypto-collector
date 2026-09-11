@@ -31,7 +31,6 @@ jobs:
   # ══════════════ httpx-only jobs ══════════════
   price_collector:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -44,11 +43,10 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         COINCAP_API_KEY: ${{ secrets.COINCAP_API_KEY }}
-      run: python crypto/price_collector.py || echo "[FAIL]"
+      run: python crypto/price_collector.py
 
   airdrop:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -58,11 +56,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         HOT_TOKENS_CATEGORY_NAME: ${{ vars.HOT_TOKENS_CATEGORY_NAME }}
-      run: python crypto/airdrop_scraper.py --save --max 20 || echo "[FAIL]"
+      run: python crypto/airdrop_scraper.py --save --max 20
 
   indo_news:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -72,11 +69,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         INDO_CATEGORY_NAME: ${{ vars.INDO_CATEGORY_NAME }}
-      run: python news_scrapers/indo_news/indo_news_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python news_scrapers/indo_news/indo_news_scraper.py --save --max 10
 
   tokocrypto:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -85,11 +81,10 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python crypto/tokocrypto/tokocrypto_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/tokocrypto/tokocrypto_scraper.py --save --max 10
 
   indodax:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -98,11 +93,10 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python crypto/indodax/indodax_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python crypto/indodax/indodax_scraper.py --save --max 15
 
   pintu:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -112,11 +106,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         PINTU_CATEGORY_NAME: ${{ vars.PINTU_CATEGORY_NAME }}
-      run: python crypto/pintu/pintu_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python crypto/pintu/pintu_scraper.py --save --max 15
 
   mobee:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -125,11 +118,10 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python crypto/mobee/mobee_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/mobee/mobee_scraper.py --save --max 10
 
   detik_sport:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -139,11 +131,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python news_scrapers/sport_detik/detik_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python news_scrapers/sport_detik/detik_scraper.py --save --max 15
 
   tribunbola:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -153,11 +144,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python news_scrapers/tribunbola/tribunbola_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python news_scrapers/tribunbola/tribunbola_scraper.py --save --max 10
 
   dailysports:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -167,12 +157,11 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python news_scrapers/dailysports/dailysports_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python news_scrapers/dailysports/dailysports_scraper.py --save --max 10
 
   # ══════════════ Playwright (Chromium) jobs ══════════════
   binance_news:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -184,11 +173,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
-      run: python news_scrapers/binance/news_scraper.py --scroll 5 --max 50 --save || echo "[FAIL]"
+      run: python news_scrapers/binance/news_scraper.py --scroll 5 --max 50 --save
 
   fifa_schedule:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -201,11 +189,10 @@ jobs:
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         POSTS_CATEGORY_NAME: ${{ vars.POSTS_CATEGORY_NAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python sport/schedule/fifa_scraper.py --save || echo "[FAIL]"
+      run: python sport/schedule/fifa_scraper.py --save
 
   fifa_blog:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -217,11 +204,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python sport/blog/fifa_blog_scraper.py --save --max 30 || echo "[FAIL]"
+      run: python sport/blog/fifa_blog_scraper.py --save --max 30
 
   indonesia_esports:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -233,11 +219,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         ESPORTS_CATEGORY_NAME: ${{ vars.ESPORTS_CATEGORY_NAME }}
-      run: python esports/esports_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python esports/esports_scraper.py --save --max 10
 
   goal:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -249,11 +234,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python sport/goal/goal_scraper.py --save --live || echo "[FAIL]"
+      run: python sport/goal/goal_scraper.py --save --live
 
   osl:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -264,11 +248,10 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python crypto/osl/osl_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/osl/osl_scraper.py --save --max 10
 
   bitget:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -279,11 +262,10 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python crypto/bitget/bitget_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/bitget/bitget_scraper.py --save --max 10
 
   okx:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -294,11 +276,10 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
-      run: python crypto/okx/okx_scraper.py --save --max 10 || echo "[FAIL]"
+      run: python crypto/okx/okx_scraper.py --save --max 10
 
   bolasport:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -310,94 +291,88 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python news_scrapers/bolasport/bolasport_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python news_scrapers/bolasport/bolasport_scraper.py --save --max 15
 
   # ══ 印尼甲级联赛 (CloakBrowser, Cloudflare) ══
   forebet:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
     - run: |
         pip install -r requirements.txt
-        cloakbrowser install || echo "CloakBrowser verify skipped"
+        cloakbrowser install
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python sport/forebet/forebet_scraper.py --save || echo "[FAIL]"
+      run: python sport/forebet/forebet_scraper.py --save
 
   fastscore:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
     - run: |
         pip install -r requirements.txt
-        cloakbrowser install || echo "CloakBrowser verify skipped"
+        cloakbrowser install
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python sport/fastscore/fastscore_scraper.py --save || echo "Fastscore Cloudflare blocked"
+      run: python sport/fastscore/fastscore_scraper.py --save
 
   footballant:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
     - run: |
         pip install -r requirements.txt
-        cloakbrowser install || echo "CloakBrowser verify skipped"
+        cloakbrowser install
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python sport/footballant/footballant_scraper.py --save || echo "Footballant - check LEAGUE_ID"
+      run: python sport/footballant/footballant_scraper.py --save
 
   # ══ 印尼羽毛球 (CloakBrowser) ══
   bwf_indonesia:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
     - run: |
         pip install -r requirements.txt
-        cloakbrowser install || echo "CloakBrowser verify skipped"
+        cloakbrowser install
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python sport/badminton/bwf_indonesia_scraper.py --save || echo "BWF Indonesia done"
+      run: python sport/badminton/bwf_indonesia_scraper.py --save
 
   bwf_calendar:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
     - run: |
         pip install -r requirements.txt
-        cloakbrowser install || echo "CloakBrowser verify skipped"
+        cloakbrowser install
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python sport/badminton/bwf_calendar_scraper.py --save || echo "BWF Calendar done"
+      run: python sport/badminton/bwf_calendar_scraper.py --save
 
   # ══════════════ CloakBrowser (美股) ══════════════
   us_stock:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -406,7 +381,7 @@ jobs:
         playwright install-deps chromium
     - run: |
         pip install -r requirements.txt
-        cloakbrowser install || echo "CloakBrowser verify skipped"
+        cloakbrowser install
     - name: Run
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -415,7 +390,6 @@ jobs:
   # ══════════════ 篮球 IBL (httpx) ══════════════
   mainbasket:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -425,11 +399,10 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python news_scrapers/mainbasket/mainbasket_scraper.py --save --max 15 || echo "[FAIL]"
+      run: python news_scrapers/mainbasket/mainbasket_scraper.py --save --max 15
 
   ibl_data:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - {uses: actions/checkout@v4}
     - {uses: actions/setup-python@v5, with: {python-version: '3.11'}}
@@ -439,4 +412,4 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         POSTS_AUTHOR_USERNAME: ${{ vars.POSTS_AUTHOR_USERNAME }}
         FIFA_CATEGORY_NAME: ${{ vars.FIFA_CATEGORY_NAME }}
-      run: python news_scrapers/ibl_data/ibl_data_scraper.py --save || echo "[FAIL]"
+      run: python news_scrapers/ibl_data/ibl_data_scraper.py --save

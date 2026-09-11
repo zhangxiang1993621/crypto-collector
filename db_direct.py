@@ -325,6 +325,27 @@ def select_all(table_name: str, where: dict | None = None, columns: str = "*",
     return result if result else []
 
 
+def existing_titles(category_id: str, titles: list[str]) -> set[str]:
+    """返回给定标题中已存在于 posts 表（指定分类）的标题集合。
+
+    用于发帖前的跨轮去重：调用方应传入最终写库时的标题形式（如 title[:200]）。
+
+    Args:
+        category_id: posts.category_id
+        titles: 待检查的标题列表
+
+    Returns:
+        已存在的标题集合
+    """
+    clean = [t for t in dict.fromkeys(titles) if t]
+    if not clean:
+        return set()
+    placeholders = ", ".join(["%s"] * len(clean))
+    sql = f'SELECT title FROM posts WHERE category_id = %s AND title IN ({placeholders})'
+    rows = execute_sql(sql, (category_id, *clean)) or []
+    return {r["title"] for r in rows}
+
+
 def insert_one(table_name: str, data: dict, returning: str = "*", schema: str = "public") -> dict | None:
     """单行插入（等价于 Supabase .insert().execute()）
     

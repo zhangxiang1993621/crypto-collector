@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import httpx
 from dotenv import load_dotenv
-from db_direct import select_one, select_all, insert_one, execute_sql
+from db_direct import select_one, select_all, insert_one, existing_titles, execute_sql
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
@@ -241,7 +241,13 @@ def run(save: bool = False, max_items: int = 10):
         now = datetime.now(timezone.utc).isoformat()
         saved = 0
 
+        existing = existing_titles(category_id, [a["title"][:200] for a in articles])
+
         for art in articles:
+            title = art["title"][:200]
+            if title in existing:
+                logger.info("  [跳过] 已存在: %s...", title[:50])
+                continue
             content = build_post_html(art)
             tags = TAGS_DEFAULT + extract_tags_from_text(
                 art["title"], art.get("summary", "")
