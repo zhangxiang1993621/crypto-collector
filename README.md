@@ -1,49 +1,89 @@
 # Crypto Collector
 
-加密货币、体育赛事、新闻资讯多源数据采集与发布系统。通过爬虫自动抓取数据，存入 Supabase 后端，前端站点消费展示。
+加密货币、体育赛事、新闻资讯、电竞与美股行情多源数据采集与发布系统。爬虫抓取数据后**直连 PostgreSQL 写入 Supabase**，前端站点消费展示；定时调度支持 **GitHub Actions** 与**本地 GUI 面板**两条通道。
 
-## 项目结构
+## 架构总览
+
+```mermaid
+flowchart LR
+  subgraph SRC[数据源]
+    WEB[交易所 / 新闻 / 体育 网页与 API]
+    AI[DeepSeek API]
+    YF[Yahoo Finance chart API]
+  end
+  subgraph COL[采集层]
+    C[crypto/]
+    N[news_scrapers/]
+    S[sport/]
+    E[esports/]
+    A[ai_digest/]
+    U[us_stock_scraper/]
+  end
+  subgraph SCH[调度层]
+    GH[GitHub Actions\nscheduler.yml]
+    GUI[本地 GUI\ntask_manager/]
+  end
+  DB[(Supabase PostgreSQL)]
+  WEB --> COL
+  YF --> U
+  AI --> A
+  GH --> COL
+  GUI --> COL
+  COL -->|db_direct.py| DB
+  DB --> FE[前端站点]
+```
+
+- **采集层**：按业务域分包的独立 Python 脚本，每个脚本可单独运行。
+- **数据层**：`db_direct.py` 直连 PostgreSQL，绕过 Supabase REST API 的作业限制。
+- **调度层**：GitHub Actions 定时执行 + `task_manager/` 本地 tkinter 面板手动管理。
+- **详细说明见** [`docs/`](docs/README.md)。
+
+## 目录结构
 
 ```
 crypto-collector/
-├── price_collector/       # 加密货币价格采集（CoinCap API）
-├── news_scraper/          # 币安广场新闻抓取（Playwright）
-├── airdrop_scraper/       # 交易所空投福利公告
-├── ai_digest/             # AI 新闻摘要 + 机器人观点发帖
-├── fifa_scraper/          # 世界杯赛程抓取
-├── fifa_blog_scraper/     # FIFA 官方博客文章
-├── worldcup_scraper/      # 2026 世界杯比分实时更新
-├── esports_scraper/       # 印尼电子竞技新闻（DuniaGames）
-├── indo_news_scraper/     # 印尼热点新闻（Google+Twitter）
-├── us_stock_scraper/      # 美股分钟K线采集+图表生成
-├── bilibili_scraper/      # B站视频采集
-├── tg_summary_bot/        # Telegram 群消息汇总 Bot
-├── task_manager/          # 本地 GUI 任务调度面板（APScheduler）
-├── supabase_client.py     # Supabase 客户端封装
-├── task_config.json        # 任务调度配置
-├── run_task_manager.py    # 任务面板启动入口
-├── requirements.txt       # Python 依赖
-├── .env.example           # 环境变量模板
-└── .github/workflows/     # GitHub Actions 定时调度
+├── crypto/                    # 加密市场
+│   ├── price_collector.py     #   CoinCap 价格采集 → tokens 表
+│   ├── airdrop_scraper.py     #   交易所空投/福利公告 → 帖子
+│   ├── tokocrypto/            #   Tokocrypto 活动（httpx）
+│   ├── indodax/               #   Indodax 博客（WP REST API）
+│   ├── pintu/                 #   Pintu 博客（WP REST API）
+│   ├── mobee/                 #   Mobee 新闻（Webflow HTML）
+│   ├── osl/                   #   OSL 公告（Playwright）
+│   ├── bitget/                #   Bitget 新闻（Playwright）
+│   └── okx/                   #   OKX 公告（Playwright）
+├── news_scrapers/             # 新闻/体育资讯
+│   ├── binance/               #   币安广场新闻（Playwright）
+│   ├── indo_news/             #   印尼热点（Google News RSS + trends24）
+│   ├── sport_detik/           #   Detik Sport（RSS）
+│   ├── tribunbola/            #   Tribunbola
+│   ├── bolasport/             #   BolaSport（Playwright）
+│   ├── dailysports/           #   Dailysports
+│   ├── mainbasket/            #   Mainbasket（IBL 篮球）
+│   └── ibl_data/              #   IBL Gopay 2026 赛事数据
+├── sport/                     # 足球/羽毛球赛事
+│   ├── schedule/              #   FIFA 2026 赛程
+│   ├── blog/                  #   FIFA 官方 Blog
+│   ├── goal/                  #   世界杯比分
+│   ├── forebet/  fastscore/  footballant/   # 印尼联赛数据（CloakBrowser）
+│   └── badminton/             #   BWF 印尼赛 + 全年赛历（CloakBrowser）
+├── esports/                   # 电竞新闻（DuniaGames）
+├── ai_digest/                 # DeepSeek AI 日报 + 机器人观点发帖
+├── us_stock_scraper/          # 美股 1 分钟 K 线 + 趋势汇总
+├── tg_summary_bot/            # 独立子系统：Telegram 群消息汇总（Telethon + SQLite）
+├── task_manager/              # 本地 GUI 任务面板（APScheduler）
+│   ├── gui.py                 #   tkinter 界面
+│   ├── scheduler_engine.py    #   调度引擎 + YAML 导入/同步
+│   ├── create_bots.py         #   批量创建机器人账号
+│   └── _cleanup_indo_news.py  #   一次性清理脚本
+├── tools/                     # 运维脚本（诊断/清理/VACUUM）
+├── docs/                      # 项目文档（见下）
+├── db_direct.py               # Supabase 直连 PostgreSQL 工具
+├── run_task_manager.py        # 本地任务面板入口
+├── requirements.txt           # Python 依赖
+├── .env.example               # 环境变量模板
+└── .github/workflows/scheduler.yml   # GitHub Actions 定时调度
 ```
-
-## 所有爬虫一览
-
-| 爬虫 | 目录 | 数据源 | 分类 | 发帖人 | 频率 |
-|---|---|---|---|---|---|
-| 加密价格 | `price_collector/` | CoinCap API | - | - | 每 30 分钟 |
-| 币安新闻 | `news_scraper/` | 币安广场 | news | indoAdmin | 每 2 小时 |
-| 空投福利 | `airdrop_scraper/` | 各大交易所 | Hot Tokens | indoAdmin | 每 6 小时 |
-| AI 摘要 | `ai_digest/` | AI 生成 | Hot Tokens | 系统 | 每 4 小时 |
-| 机器人观点 | `ai_digest/` | AI 生成 | Hot Tokens | 随机 Bot | 每天 12:00 |
-| 世界杯赛程 | `fifa_scraper/` | FIFA API | Sports Talk | indoAdmin | 每 6 小时 |
-| FIFA Blog | `fifa_blog_scraper/` | FIFA 官网 | Sports Talk | indoAdmin | 每 2 小时 |
-| 世界杯比分 | `worldcup_scraper/` | 搜狐体育+FIFA | Sports Talk | indoAdmin | 每 30 分钟 |
-| 电竞新闻 | `esports_scraper/` | DuniaGames | E-Sports | indoAdmin | 每天 8/20 点 |
-| 印尼热点 | `indo_news_scraper/` | Google+Twitter | Indo Street | indoAdmin | 每天 7/19 点 |
-| 美股数据 | `us_stock_scraper/` | Yahoo Finance | - | - | 工作日 21:30 |
-| B站视频 | `bilibili_scraper/` | 哔哩哔哩 | - | - | 手动 |
-| TG 摘要 | `tg_summary_bot/` | Telegram 群聊 | - | - | 手动 |
 
 ## 快速开始
 
@@ -57,108 +97,115 @@ crypto-collector/
 ```bash
 pip install -r requirements.txt
 
-# Playwright 浏览器（news / fifa / esports / worldcup 需要）
+# 需要浏览器自动化的爬虫（binance / osl / bitget / okx / fifa / esports / goal）
 playwright install chromium
-
-# CloakBrower 浏览器（us_stock 需要）
-cloakbrowser install
 ```
+
+> CloakBrowser 为反检测备选（`us_stock_scraper`、`sport/*` 部分脚本使用），按 `cloakbrowser` 文档安装。
+> 选择 Playwright 还是 CloakBrowser 的规则见 [`docs/conventions.md`](docs/conventions.md)。
 
 ### 配置
 
-复制 `.env.example` 为 `.env`，填入 Supabase 和 API 密钥：
+复制 `.env.example` 为 `.env` 并填入真实值：
 
 ```bash
 cp .env.example .env
 ```
 
-必填变量：
+核心变量（完整清单见 [`docs/operations.md`](docs/operations.md)）：
 
 | 变量 | 说明 |
 |---|---|
-| `SUPABASE_URL` | Supabase 项目地址 |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role Key |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key（AI 摘要需要） |
-| `COINCAP_API_KEY` | CoinCap API Key（价格采集需要） |
-
-发布配置：
-
-| 变量 | 说明 |
-|---|---|
-| `POSTS_AUTHOR_USERNAME` | 默认发帖用户名 |
-| `POSTS_CATEGORY_NAME` | 新闻分类 |
-| `FIFA_CATEGORY_NAME` | FIFA / 世界杯分类 |
-| `INDO_CATEGORY_NAME` | 印尼新闻分类 |
-| `ESPers_CATEGORY_NAME` | 电竞分类 |
-| `HOT_TOKENS_CATEGORY_NAME` | AI 摘要分类 |
+| `DATABASE_URL` | Supabase PostgreSQL 直连串（首选） |
+| `SUPABASE_URL` + `SUPABASE_DB_PASSWORD` | 直连的备选方式（二选一） |
+| `SUPABASE_SERVICE_ROLE_KEY` | 仅在 `create_bots.py` 等少数脚本使用 |
+| `COINCAP_API_KEY` | CoinCap 价格采集 |
+| `DEEPSEEK_API_KEY` | AI 日报 / 机器人观点 |
+| `POSTS_AUTHOR_USERNAME` | 默认发帖账号（`indoAdmin`） |
+| `*_CATEGORY_NAME` | 各业务域发帖分类 |
 
 ### 运行方式
 
-**方式一：本地任务面板（推荐）**
+**方式一：本地任务面板（推荐交互调试）**
 
 ```bash
 python run_task_manager.py
 ```
 
-打开 GUI 面板后可以：启停任务、编辑 cron、查看实时日志、手动触发。
+面板可：启停任务、编辑 cron、立即执行、按分类批量执行、查看实时日志、同步配置回 YAML。详见 [`docs/scheduling.md`](docs/scheduling.md)。
 
 **方式二：GitHub Actions**
 
-推送代码到 `main` 分支后自动按 cron 调度。也可在 [Actions 页面](https://github.com/zhangxiang1993621/crypto-collector/actions) 手动触发。
+推送到 `main` 分支后按 `scheduler.yml` 中的 cron 调度；也可在 Actions 页面 `workflow_dispatch` 手动触发。需在仓库 Settings 配置 Secrets / Variables。
 
-GitHub 上需要配置的 Secrets / Variables：
-- Settings → Secrets and variables → Actions → Secrets
-- Settings → Secrets and variables → Actions → Variables
-
-**方式三：命令行单独执行**
+**方式三：单脚本命令行**
 
 ```bash
-# 世界杯比分
-python worldcup_scraper/worldcup_scraper.py --save --today --max 20
+# 加密价格（无 --save，直接写 tokens 表）
+python crypto/price_collector.py
+
+# 空投福利（不加 --save 只预览）
+python crypto/airdrop_scraper.py --save --max 20
 
 # 币安新闻
-python news_scraper/news_scraper.py --scroll 5 --max 50 --save
+python news_scrapers/binance/news_scraper.py --scroll 5 --max 50 --save
 
-# AI 摘要
+# AI 日报
 python ai_digest/ai_digest.py --save --max 10
+
+# 美股 1 分钟 K 线并上传
+python us_stock_scraper/us_stock_scraper.py --upload --backfill 4
 ```
 
-## 核心设计
+> 全部爬虫的入口命令、数据源与频率见 [`docs/scrapers.md`](docs/scrapers.md)。
 
-### 防重复机制
+## 发布模型
 
-所有发帖类爬虫使用 **title 去重** 的 upsert 策略：
+所有发帖类爬虫写入 Supabase `posts` 表：
 
-1. 爬取到数据后，生成唯一标题
-2. 查询 Supabase `posts` 表中是否存在同标题帖子
-3. 存在 → UPDATE 更新内容（如世界杯比分刷新）
-4. 不存在 → INSERT 新建帖子
+- **字段**：`title` / `content`(HTML) / `author_id` / `category_id` / `post_type="info"` / `status="pending_review"` / 时间戳。
+- **作者**：从 `profiles` 按用户名或随机机器人账号解析。
+- **分类**：从 `categories` 按 `*_CATEGORY_NAME` 环境变量解析，未配置时用脚本默认值。
+- **标签**：写入 `tags` + `post_tags`，多数脚本按标题/正文关键词自动打标。
+- **幂等**：多数脚本先按 `title` 查重，存在则跳过/更新，避免重复发帖。
 
-### 世界杯比分更新
+数据表细节见 [`docs/data-model.md`](docs/data-model.md)。
 
-`worldcup_scraper` 的特殊逻辑：
-- **首次运行**：为当天 + 未来的比赛各创建一条帖子
-- **后续运行**：仅更新已有帖子的内容（比分），不新建重复帖子
-- 每场比赛对应一条帖子，标题格式：`⚽ TeamA vs TeamB — 阶段名`
+## 爬虫一览（摘要）
 
-### CI 容错
+| 域 | 入口 | 数据源 | 抓取方式 | 分类变量 |
+|---|---|---|---|---|
+| 加密价格 | `crypto/price_collector.py` | CoinCap v3 | httpx | —（写 tokens） |
+| 空投福利 | `crypto/airdrop_scraper.py` | Binance/Bybit/OKX/Gate | httpx | `HOT_TOKENS_CATEGORY_NAME` |
+| 印尼交易所 | `crypto/{tokocrypto,indodax,pintu,mobee,osl,bitget,okx}/` | 各交易所官网 | httpx / Playwright | 各自 `*_CATEGORY_NAME` |
+| 币安新闻 | `news_scrapers/binance/news_scraper.py` | 币安广场 | Playwright | `POSTS_CATEGORY_NAME` |
+| 印尼热点 | `news_scrapers/indo_news/indo_news_scraper.py` | Google News RSS + X 热搜 | httpx | `INDO_CATEGORY_NAME` |
+| 体育资讯 | `news_scrapers/{sport_detik,tribunbola,bolasport,dailysports,mainbasket,ibl_data}/` | 各体育媒体 / FIBA LiveStats | httpx / Playwright | `FIFA_CATEGORY_NAME` |
+| 世界杯 | `sport/schedule`, `sport/blog`, `sport/goal` | FIFA / Goal.com | Playwright + httpx | `FIFA_CATEGORY_NAME` |
+| 印尼联赛 | `sport/{forebet,fastscore,footballant}/` | 各数据站 | CloakBrowser | `FIFA_CATEGORY_NAME` |
+| 羽毛球 | `sport/badminton/` | BWF / olympics.com | CloakBrowser | `FIFA_CATEGORY_NAME` |
+| 电竞 | `esports/esports_scraper.py` | DuniaGames | Playwright + httpx | `ESPORTS_CATEGORY_NAME` |
+| AI 日报 | `ai_digest/ai_digest.py` `bot_posts.py` | DeepSeek | httpx | `HOT_TOKENS_CATEGORY_NAME` |
+| 美股 | `us_stock_scraper/us_stock_scraper.py` | Yahoo Finance | CloakBrowser | —（写 us_stock_*） |
+| TG 汇总 | `tg_summary_bot/main.py` | Telegram 群 | Telethon | —（独立 SQLite） |
 
-GitHub Actions 中所有 job 均设置 `continue-on-error: true`，任何单个任务失败不影响其余任务。失败任务在 Actions 页面显示黄色警告图标。
+## 文档
 
-## 项目依赖
+| 文档 | 内容 |
+|---|---|
+| [docs/README.md](docs/README.md) | 文档索引与维护约定 |
+| [docs/architecture.md](docs/architecture.md) | 系统架构、模块分层、公共模式 |
+| [docs/data-model.md](docs/data-model.md) | Supabase 数据表与去重/upsert 语义 |
+| [docs/scheduling.md](docs/scheduling.md) | GitHub Actions + 本地 GUI 双调度通道 |
+| [docs/scrapers.md](docs/scrapers.md) | 全部爬虫的入口/数据源/参数清单 |
+| [docs/operations.md](docs/operations.md) | 环境变量、运维脚本、故障排查 |
+| [docs/conventions.md](docs/conventions.md) | 编码规范与新增爬虫步骤 |
 
-```
-httpx              HTTP 客户端
-supabase           Supabase SDK
-playwright         浏览器自动化（首选）
-cloakbrowser       反检测浏览器（备选）
-python-dotenv      环境变量管理
-apscheduler        本地任务调度
-pyyaml             CI 配置解析
-yfinance           美股行情数据
-mplfinance         金融K线图绘制
-matplotlib         图表渲染
-```
+## 已知问题
+
+- GitHub Actions 的 `on.schedule` 目前有 23 条相同的 `0 0 * * *` 条目，而 27 个 job 都没有 `if` 条件；每次触发会执行工作流内全部 job。存在重复执行风险，详见 [docs/scheduling.md](docs/scheduling.md) 的"已知问题"。
+- `.env.example` 早期版本曾包含真实密钥，需轮换对应凭据（见 [docs/operations.md](docs/operations.md)）。
+- `news_scrapers/binance/assemble_posts.py` 已废弃，改用 `news_scraper.py --save`。
 
 ## 许可证
 
